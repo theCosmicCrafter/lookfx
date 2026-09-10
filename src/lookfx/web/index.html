@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LookFX</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="app.css">
+</head>
+<body data-theme="dense">
+<div id="app">
+
+  <!-- title bar -->
+  <header id="titlebar">
+    <div class="brand"><span class="mark"></span><span class="name">LookFX</span></div>
+    <span id="project-name" class="mono dim">no project</span>
+    <span id="dirty" class="mono pulse" hidden>● unsaved</span>
+    <div class="grow"></div>
+    <span class="label">Style</span>
+    <select id="theme-select" class="theme">
+      <option value="dense">Dense</option><option value="roomy">Roomy</option><option value="graphite">Graphite</option>
+      <option value="midnight">Midnight</option><option value="forest">Forest</option>
+      <option value="light">Light</option><option value="paper">Paper</option>
+    </select>
+    <div class="swatches" id="accent-swatches">
+      <button class="swatch on" data-accent="amber" style="background:oklch(0.74 0.16 58)" title="Amber"></button>
+      <button class="swatch" data-accent="cyan" style="background:oklch(0.72 0.15 200)" title="Cyan"></button>
+      <button class="swatch" data-accent="green" style="background:oklch(0.70 0.17 145)" title="Green"></button>
+      <button class="swatch" data-accent="magenta" style="background:oklch(0.68 0.19 350)" title="Magenta"></button>
+    </div>
+    <span class="vsep"></span>
+    <span id="gpu" class="mono dim">—</span>
+  </header>
+
+  <div id="body">
+    <!-- rail -->
+    <nav id="rail">
+      <button data-screen="welcome"><span class="glyph">◇</span><span>Welcome</span></button>
+      <button data-screen="edit" class="on"><span class="glyph">◐</span><span>Edit</span></button>
+      <button data-screen="queue"><span class="glyph">▶</span><span>Queue</span></button>
+      <button data-screen="settings"><span class="glyph">⚙</span><span>Settings</span></button>
+      <div class="grow"></div>
+      <div id="rail-versions" class="mono">—</div>
+    </nav>
+
+    <!-- WELCOME -->
+    <section id="screen-welcome" class="screen" hidden>
+      <div class="card welcome">
+        <div class="brand big"><span class="mark"></span><span class="name">LookFX</span><span class="mono dim" id="welcome-version"></span></div>
+        <div class="h1">Open a clip, place the light, print the look.</div>
+        <div class="dim lead">Flares are solved across the whole clip once, then every frame renders on the GPU. The print look sits on top as a finishing layer.</div>
+        <div class="actions">
+          <button class="primary" id="btn-open-media">Open clip or image…</button>
+          <button id="btn-open-project">Open project…</button>
+        </div>
+        <div id="recent" class="recent"></div>
+      </div>
+    </section>
+
+    <!-- EDIT -->
+    <section id="screen-edit" class="screen">
+      <div class="toolbar">
+        <span id="src-name" class="strong">—</span>
+        <span id="src-meta" class="mono dim"></span>
+        <span class="vsep"></span>
+        <div class="seg" id="view-seg">
+          <button data-view="result" class="on">Result</button>
+          <button data-view="plate">Plate</button>
+          <button data-view="wipe">A / B</button>
+        </div>
+        <label class="wipe-ctl" id="wipe-ctl" hidden><span class="mono dim">wipe</span><input type="range" id="wipe" min="0" max="100" value="50"><span class="mono" id="wipe-val">50%</span></label>
+        <div class="grow"></div>
+        <button id="btn-solve" title="Solve the whole clip for the selected flare layer (tracking, occlusion, visibility)">Solve clip</button>
+        <span id="solve-status" class="mono dim"></span>
+        <span class="vsep"></span>
+        <button id="btn-undo" title="Undo (Ctrl+Z)">↶</button>
+        <button id="btn-redo" title="Redo (Ctrl+Shift+Z)">↷</button>
+        <button id="btn-save" title="Save project (Ctrl+S)">Save</button>
+        <button id="btn-render" class="primary">Render…</button>
+      </div>
+
+      <div class="edit-body">
+        <aside id="layers">
+          <div class="panel-head"><span>Layers</span><span class="mono dim">top renders last</span></div>
+          <div id="layer-list"></div>
+          <div class="add-row">
+            <button id="btn-add-flare">+ Flare</button>
+            <button id="btn-add-print">+ Print Look</button>
+          </div>
+          <div class="panel-head"><span>Depth</span></div>
+          <div id="depth-row" class="row-card">
+            <span id="depth-name" class="dim">none</span>
+            <button id="btn-depth" class="mini">Set…</button>
+            <button id="btn-depth-clear" class="mini" hidden>×</button>
+          </div>
+        </aside>
+
+        <main id="viewer">
+          <div id="tools">
+            <button data-tool="manual" title="Place light (drag the light and anchor)">✛</button>
+            <button data-tool="detect" title="Detect the brightest source per frame">◎</button>
+            <button data-tool="track" title="Track bright sources through the clip">⟿</button>
+            <button data-tool="follow" title="Follow camera motion (no detection)">⤳</button>
+            <button data-tool="point_track" title="Point-track a chosen feature (1–2 trackers)">⌖</button>
+            <button data-tool="path" title="Draw / edit a light path (shift-click removes)">∿</button>
+            <div class="sep"></div>
+            <button data-zoom="fit" class="on" title="Fit">⤢</button>
+            <button data-zoom="1" title="1:1">1</button>
+            <button data-zoom="2" title="2:1">2</button>
+            <div class="sep"></div>
+            <button id="tool-overlay" class="on" title="Show / hide the picker overlay">◐</button>
+          </div>
+          <div id="stage-wrap"><div id="stage">
+            <img id="view-img" alt="">
+            <img id="view-plate" alt="" hidden>
+            <div id="wipe-line" hidden></div>
+            <div id="picker-slot"></div>
+            <div id="view-badge" class="badge mono"></div>
+            <div id="view-note" class="badge mono left"></div>
+            <div id="view-empty" class="empty">Open a clip to start</div>
+          </div></div>
+        </main>
+
+        <div id="params-handle"></div>
+        <aside id="params">
+          <div class="panel-head"><span id="params-title">Parameters</span><span id="params-kind" class="mono dim"></span></div>
+          <div id="params-body"></div>
+          <div id="params-empty" class="empty small">Select a layer</div>
+        </aside>
+      </div>
+
+      <div id="timeline">
+        <div class="transport">
+          <button id="tp-first" title="First (Home)">|&lt;</button>
+          <button id="tp-prev" title="Previous (←)">&lt;</button>
+          <button id="tp-play" title="Play cached frames (Space)">▶</button>
+          <button id="tp-next" title="Next (→)">&gt;</button>
+          <button id="tp-last" title="Last (End)">&gt;|</button>
+          <span class="vsep"></span>
+          <button id="tp-in" title="Set in (I)">In</button>
+          <button id="tp-out" title="Set out (O)">Out</button>
+        </div>
+        <canvas id="tl-canvas"></canvas>
+        <div class="readout">
+          <span id="tl-frame" class="mono big">0</span>
+          <span id="tl-total" class="mono dim">/ 0</span>
+          <span id="tl-fps" class="mono dim"></span>
+        </div>
+      </div>
+    </section>
+
+    <!-- QUEUE -->
+    <section id="screen-queue" class="screen" hidden>
+      <div class="toolbar">
+        <span class="strong">Render queue</span>
+        <span id="queue-summary" class="mono dim"></span>
+        <div class="grow"></div>
+        <button id="btn-queue-refresh">Refresh</button>
+      </div>
+      <div id="job-list" class="scroll pad"></div>
+    </section>
+
+    <!-- SETTINGS -->
+    <section id="screen-settings" class="screen" hidden>
+      <div class="scroll pad">
+        <div class="settings">
+          <div class="h1">Settings</div>
+          <div class="dim lead">Compute, tools and where your files live.</div>
+          <div id="settings-groups"></div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <!-- status bar -->
+  <footer id="statusbar">
+    <span id="status-dot" class="acc">● ready</span>
+    <span id="status-msg"></span>
+    <div class="grow"></div>
+    <span id="status-versions"></span>
+  </footer>
+
+  <!-- render dialog -->
+  <dialog id="render-dialog">
+    <form method="dialog">
+      <div class="h2">Render</div>
+      <label>Output<div class="hrow"><input id="rd-path" type="text" placeholder="F:\renders\shot_fx.mov"><button type="button" id="rd-browse">…</button></div></label>
+      <div class="hrow">
+        <label class="grow">Codec<select id="rd-codec"></select></label>
+        <label>Chunk<input id="rd-chunk" type="number" min="0" value="0" title="frames per GPU chunk, 0 = auto"></label>
+      </div>
+      <div class="hrow">
+        <label class="grow">Range<div class="hrow"><input id="rd-start" type="number" min="0"><span class="dim">to</span><input id="rd-end" type="number" min="1"></div></label>
+        <label class="check"><input id="rd-audio" type="checkbox" checked> copy audio</label>
+      </div>
+      <div class="hrow">
+        <label class="check"><input id="rd-pass" type="checkbox"> also write flare pass</label>
+        <label class="check"><input id="rd-plates" type="checkbox"> also write ink plates</label>
+      </div>
+      <div class="hrow end">
+        <button type="button" id="rd-cancel">Cancel</button>
+        <button type="button" class="primary" id="rd-go">Start render</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div id="toast" hidden></div>
+</div>
+<script type="module" src="app.js"></script>
+</body>
+</html>

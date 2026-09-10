@@ -1,0 +1,238 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; background: #131317; }
+    a { color: #e8a33d; } a:hover { color: #ffd08a; }
+    .lx * { box-sizing: border-box; }
+    .lx-sec { color: #8a8fa8; font-size: 11px; letter-spacing: .04em; text-transform: uppercase; }
+    .lx-btn { background: #1e1e25; color: #ddd; border: 1px solid #34343e; border-radius: 3px; padding: 0 12px; height: 36px; font-size: 12px; display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+    .lx-btn.accent { color: #e8a33d; }
+    .lx-btn.on { border-color: #e8a33d; color: #ffd08a; background: #30271e; }
+    .lx-mini { background: #1e1e25; border: 1px solid #2b2b33; color: #999; border-radius: 3px; width: 26px; height: 26px; font-size: 12px; display: flex; align-items: center; justify-content: center; }
+    .lx-mini.on { background: #2f4a75; border-color: #4f7ac0; color: #fff; }
+    .lx-row { background: #1a1a20; border: 1px solid #2b2b33; border-radius: 4px; padding: 7px 9px; display: flex; flex-direction: column; gap: 6px; }
+    .lx-chip { width: 44px; height: 44px; border-radius: 3px; flex: 0 0 44px; background: #101014; border: 1px solid #2b2b33; display: flex; align-items: center; justify-content: center; }
+    .lx-col { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 62px; }
+    .lx-col label { color: #7a7a86; font-size: 10px; text-align: center; }
+    .lx-range { height: 12px; display: flex; align-items: center; }
+    .lx-range i { display: block; height: 3px; background: #2b2b33; border-radius: 2px; flex: 1; position: relative; }
+    .lx-range i b { position: absolute; top: -5px; width: 12px; height: 12px; border-radius: 50%; background: #e8a33d; margin-left: -6px; }
+    .lx-num { background: #101014; color: #ddd; border: 1px solid #2b2b33; border-radius: 3px; font-size: 11px; padding: 2px 4px; text-align: center; height: 20px; }
+    .lx-name { color: #eee; font-weight: 600; font-size: 12px; min-width: 68px; max-width: 110px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .lx-kv { display: flex; justify-content: space-between; font-size: 12px; color: #ccc; }
+    .lx-kv span:last-child { color: #7a7a86; }
+    .lx-select { background: #101014; color: #eee; border: 1px solid #3a3a44; border-radius: 4px; height: 34px; padding: 0 10px; font-size: 12px; display: flex; align-items: center; justify-content: space-between; }
+  </style>
+</helmet>
+<div class="lx" style="width: 1440px; height: 900px; background: #131317; color: #ccc; font: 12px/1.4 sans-serif; display: flex; flex-direction: column; overflow: hidden;">
+
+  <!-- Top bar -->
+  <div style="height: 44px; flex: 0 0 44px; display: flex; align-items: center; gap: 14px; padding: 0 14px; border-bottom: 1px solid #2b2b33; background: #101014;">
+    <div style="font-weight: 700; font-size: 14px; color: #eee; letter-spacing: .02em;">lookfx</div>
+    <div style="color: #7a7a86;">dusk_card_v3.lookfx</div>
+    <div style="margin-left: auto; display: flex; gap: 8px;">
+      <div class="lx-btn" style="height: 30px;">Open…</div>
+      <div class="lx-btn" style="height: 30px;">Save</div>
+      <div class="lx-btn" style="height: 30px; width: 30px; padding: 0; justify-content: center;">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#ccc" stroke-width="1.5"><circle cx="8" cy="8" r="2.5"></circle><path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M3.4 12.6l1.4-1.4M11.2 4.8l1.4-1.4"></path></svg>
+      </div>
+    </div>
+  </div>
+
+  <!-- Body: 3 columns -->
+  <div style="flex: 1; display: flex; min-height: 0;">
+
+    <!-- Left: project + stack -->
+    <div style="width: 260px; flex: 0 0 260px; border-right: 1px solid #2b2b33; display: flex; flex-direction: column; gap: 12px; padding: 12px;">
+      <div style="display: flex; flex-direction: column; gap: 6px;">
+        <div class="lx-sec">Source</div>
+        <div class="lx-row" style="gap: 3px;">
+          <div class="lx-name" style="max-width: none;">dusk_card_v3.mp4</div>
+          <div class="lx-kv"><span>1920 × 1080</span><span>240 f · 24 fps</span></div>
+          <div class="lx-kv"><span>audio</span><span>copy</span></div>
+        </div>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 6px;">
+        <div class="lx-sec">Depth</div>
+        <div class="lx-row" style="flex-direction: row; align-items: center; gap: 8px;">
+          <div class="lx-name" style="flex: 1; max-width: none; color: #7a7a86; font-weight: 400;">dusk_card_v3_depth.mp4</div>
+          <div class="lx-mini"><svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="#ccc" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3l6 6M9 3l-6 6"></path></svg></div>
+        </div>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 6px;">
+        <div class="lx-sec">Output</div>
+        <div class="lx-row" style="gap: 3px;">
+          <div class="lx-name" style="max-width: none;">dusk_card_v3_fx.mov</div>
+          <div class="lx-kv"><span>ProRes 422 HQ</span><span>0 – 239</span></div>
+        </div>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 6px; flex: 1; min-height: 0; margin-top: 6px;">
+        <div class="lx-sec" style="display: flex; justify-content: space-between; align-items: center;"><span>Effect stack</span><span style="text-transform: none; letter-spacing: 0; color: #7a7a86;">top → bottom</span></div>
+        <div class="lx-row" style="flex-direction: row; align-items: center; gap: 8px;">
+          <div class="lx-mini on" style="width: 20px; height: 20px; font-size: 10px;"><svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="#fff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 6.5l2.5 2.5 4.5-5"></path></svg></div>
+          <div class="lx-name" style="flex: 1;">Flare</div>
+          <div style="color: #aaa; font-size: 11px;">cine_blue</div>
+          <div class="lx-mini" style="width: 22px; height: 22px;">S</div>
+          <div class="lx-mini" style="width: 22px; height: 22px;"><svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="#ccc" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="2.5" r="1" fill="#ccc" stroke="none"></circle><circle cx="6" cy="6" r="1" fill="#ccc" stroke="none"></circle><circle cx="6" cy="9.5" r="1" fill="#ccc" stroke="none"></circle></svg></div>
+        </div>
+        <div class="lx-row" style="flex-direction: row; align-items: center; gap: 8px; border-color: #e8a33d; background: #30271e;">
+          <div class="lx-mini on" style="width: 20px; height: 20px; font-size: 10px;"><svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="#fff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 6.5l2.5 2.5 4.5-5"></path></svg></div>
+          <div class="lx-name" style="color: #ffd08a; flex: 1;">Print Look</div>
+          <div style="color: #aaa; font-size: 11px;">Vintage Poster</div>
+          <div class="lx-mini" style="width: 22px; height: 22px;">S</div>
+          <div class="lx-mini" style="width: 22px; height: 22px;"><svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="#ccc" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="2.5" r="1" fill="#ccc" stroke="none"></circle><circle cx="6" cy="6" r="1" fill="#ccc" stroke="none"></circle><circle cx="6" cy="9.5" r="1" fill="#ccc" stroke="none"></circle></svg></div>
+        </div>
+        <div class="lx-btn" style="justify-content: center; height: 32px; color: #aaa; border-style: dashed;">+ Add effect</div>
+      </div>
+    </div>
+
+    <!-- Center: viewport + transport -->
+    <div style="flex: 1; display: flex; flex-direction: column; min-width: 0; background: #0d0d10;">
+      <div style="flex: 1; position: relative; display: flex; align-items: center; justify-content: center; padding: 24px;">
+        <div style="position: relative; width: 880px; height: 495px; background: #050508; border: 1px solid #2b2b33; overflow: visible;">
+          <img src="viewport_print.jpg" style="width: 880px; height: 495px; display: block; object-fit: cover;">
+          <div style="position: absolute; right: 8px; top: 8px; background: #1c1c22cc; border: 1px solid #3a3a46; border-radius: 3px; padding: 3px 8px; font-size: 11px; color: #aaa;">preview 720 px · screen pitch scaled 0.375×</div>
+          <div style="position: absolute; left: 8px; bottom: 8px; background: #1c1c22cc; border: 1px solid #3a3a46; border-radius: 3px; padding: 3px 8px; font-size: 11px; color: #ccc;">4 inks · benday · 25/50 tint calls</div>
+        </div>
+      </div>
+      <!-- transport -->
+      <div style="flex: 0 0 56px; border-top: 1px solid #2b2b33; background: #131317; display: flex; align-items: center; gap: 10px; padding: 0 14px;">
+        <div class="lx-mini" style="width: 30px; height: 30px;">
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="#ddd"><path d="M2 1h2v10H2zM10 1L4 6l6 5z"></path></svg>
+        </div>
+        <div class="lx-mini" style="width: 30px; height: 30px;">
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="#ddd"><path d="M2 1l9 5-9 5z"></path></svg>
+        </div>
+        <div class="lx-mini" style="width: 30px; height: 30px;">
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="#ddd"><path d="M8 1h2v10H8zM2 1l6 5-6 5z"></path></svg>
+        </div>
+        <div style="flex: 1; position: relative; height: 24px; display: flex; align-items: center;">
+          <div style="position: absolute; left: 0; right: 0; height: 6px; background: #1e1e25; border: 1px solid #2b2b33; border-radius: 3px;"></div>
+          <div style="position: absolute; left: 0; width: 23.7%; height: 6px; background: #3a3225; border-radius: 3px;"></div>
+          <div style="position: absolute; left: 0; top: 0; width: 2px; height: 24px; background: #7fd8d8;"></div>
+          <div style="position: absolute; right: 0; top: 0; width: 2px; height: 24px; background: #7fd8d8;"></div>
+          <div style="position: absolute; left: 23.7%; top: 2px; width: 3px; height: 20px; background: #e8a33d; margin-left: -1px;"></div>
+        </div>
+        <div style="font: 600 13px/1 monospace; color: #eee; min-width: 96px; text-align: right;">057 / 240</div>
+        <div class="lx-btn" style="height: 28px; padding: 0 9px;">fit</div>
+        <div class="lx-btn" style="height: 28px; padding: 0 9px; color: #7a7a86;">1:1</div>
+      </div>
+    </div>
+
+    <!-- Right: Print Look panel -->
+    <div style="width: 480px; flex: 0 0 480px; border-left: 1px solid #2b2b33; display: flex; flex-direction: column; gap: 8px; padding: 10px; overflow: hidden;">
+      <div style="display: flex; gap: 8px; align-items: center;">
+        <div class="lx-btn" style="flex: 1; justify-content: flex-start;">Vintage Poster</div>
+        <div class="lx-btn">Gallery</div>
+        <div class="lx-mini" style="width: 36px; height: 36px;" title="shuffle">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#ccc" stroke-width="1.5"><path d="M1.5 4h3l6 8h4M1.5 12h3l1.5-2M8.5 6l2-2h4M12.5 2l2 2-2 2M12.5 10l2 2-2 2"></path></svg>
+        </div>
+      </div>
+
+      <div class="lx-row" style="gap: 8px;">
+        <div class="lx-sec">Pattern</div>
+        <div style="display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px;">
+          <div style="height: 44px; border: 1px solid #e8a33d; outline: 1px solid #e8a33d; border-radius: 3px; background: radial-gradient(circle, #ddd 0 2px, #101014 2.5px) 0 0 / 8px 8px;"></div>
+          <div style="height: 44px; border: 1px solid #34343e; border-radius: 3px; background: radial-gradient(circle, #101014 0 2px, #ddd 2.5px) 0 0 / 8px 8px;"></div>
+          <div style="height: 44px; border: 1px solid #34343e; border-radius: 3px; background: repeating-linear-gradient(45deg, #ddd 0 2px, #101014 2px 7px);"></div>
+          <div style="height: 44px; border: 1px solid #34343e; border-radius: 3px; background: repeating-linear-gradient(45deg, #ddd 0 2px, #101014 2px 7px), repeating-linear-gradient(-45deg, #ddd 0 2px, transparent 2px 7px); background-blend-mode: screen;"></div>
+          <div style="height: 44px; border: 1px solid #34343e; border-radius: 3px; background: repeating-radial-gradient(circle at 50% 120%, #ddd 0 2px, #101014 2px 8px);"></div>
+          <div style="height: 44px; border: 1px solid #34343e; border-radius: 3px; background: repeating-radial-gradient(circle, #ddd 0 1.5px, #101014 1.5px 7px);"></div>
+        </div>
+        <div style="display: flex; justify-content: space-between; color: #aaa; font-size: 11px;"><span>print_dots · 17 patterns</span><span>random per run: off</span></div>
+      </div>
+
+      <div style="display: flex; gap: 10px; padding: 0 2px;">
+        <div class="lx-col"><label>scale</label><div class="lx-range"><i><b style="left: 25%;"></b></i></div><div class="lx-num">96</div></div>
+        <div class="lx-col"><label>roughness</label><div class="lx-range"><i><b style="left: 42%;"></b></i></div><div class="lx-num">42</div></div>
+        <div class="lx-col"><label>dot gain</label><div class="lx-range"><i><b style="left: 35%;"></b></i></div><div class="lx-num">35</div></div>
+        <div class="lx-col"><label>ink multiply</label><div class="lx-range"><i><b style="left: 60%;"></b></i></div><div class="lx-num">60</div></div>
+        <div class="lx-col"><label>ink fade</label><div class="lx-range"><i><b style="left: 10%;"></b></i></div><div class="lx-num">10</div></div>
+      </div>
+      <div style="display: flex; gap: 10px; padding: 0 2px;">
+        <div class="lx-col"><label>plate drift</label><div class="lx-range"><i><b style="left: 12%;"></b></i></div><div class="lx-num">1.5 px</div></div>
+        <div class="lx-col"><label>offset angles</label><div class="lx-range"><i><b style="left: 66%;"></b></i></div><div class="lx-num">60°</div></div>
+        <div class="lx-col"><label>rotate</label><div class="lx-range"><i><b style="left: 50%;"></b></i></div><div class="lx-num">0°</div></div>
+        <div class="lx-col"><label>plate render</label><div class="lx-select" style="height: 20px; padding: 0 6px; font-size: 11px;"><span>benday</span></div></div>
+        <div class="lx-col"><label>tint quantize</label><div class="lx-select" style="height: 20px; padding: 0 6px; font-size: 11px;"><span>25/50</span></div></div>
+      </div>
+
+      <div class="lx-sec" style="display: flex; justify-content: space-between; align-items: center; padding: 4px 2px 0; border-top: 1px solid #2b2b33;">
+        <span>Inks · print order, first = bottom</span>
+        <div style="display: flex; gap: 6px; align-items: center; text-transform: none; letter-spacing: 0;">
+          <div class="lx-btn on" style="height: 24px; padding: 0 8px; font-size: 11px;">color match</div>
+          <div class="lx-btn" style="height: 24px; padding: 0 8px; font-size: 11px;">tint</div>
+        </div>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 5px;">
+        <div class="lx-row" style="flex-direction: row; align-items: center; gap: 8px;">
+          <div style="width: 44px; height: 44px; border-radius: 3px; border: 1px solid #2b2b33; background: #f4efe6;"></div>
+          <div class="lx-name">Paper</div>
+          <div style="flex: 1; color: #7a7a86; font-size: 11px;">#f4efe6 · warm newsprint</div>
+          <div class="lx-mini"><svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="#ccc" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="2.5" r="1" fill="#ccc" stroke="none"></circle><circle cx="6" cy="6" r="1" fill="#ccc" stroke="none"></circle><circle cx="6" cy="9.5" r="1" fill="#ccc" stroke="none"></circle></svg></div>
+        </div>
+        <div class="lx-row" style="flex-direction: row; align-items: center; gap: 8px;">
+          <div style="width: 44px; height: 44px; border-radius: 3px; border: 1px solid #2b2b33; background: #e8c547;"></div>
+          <div class="lx-name">Ink 1</div>
+          <div class="lx-col"><label>angle</label><div class="lx-num">15°</div></div>
+          <div class="lx-col"><label>freq</label><div class="lx-num">1.00</div></div>
+          <div class="lx-col"><label>pattern</label><div class="lx-select" style="height: 20px; padding: 0 6px; font-size: 11px;"><span>inherit</span></div></div>
+          <div style="display: flex; gap: 3px;"><div class="lx-mini on"><svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="#fff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M1 6s2-3.5 5-3.5S11 6 11 6s-2 3.5-5 3.5S1 6 1 6z"></path><circle cx="6" cy="6" r="1.5" fill="#fff" stroke="none"></circle></svg></div><div class="lx-mini"><svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="#ccc" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7.5l3-3 3 3"></path></svg></div><div class="lx-mini"><svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="#ccc" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4.5l3 3 3-3"></path></svg></div></div>
+        </div>
+        <div class="lx-row" style="flex-direction: row; align-items: center; gap: 8px;">
+          <div style="width: 44px; height: 44px; border-radius: 3px; border: 1px solid #2b2b33; background: #d1495b;"></div>
+          <div class="lx-name">Ink 2</div>
+          <div class="lx-col"><label>angle</label><div class="lx-num">75°</div></div>
+          <div class="lx-col"><label>freq</label><div class="lx-num">1.00</div></div>
+          <div class="lx-col"><label>pattern</label><div class="lx-select" style="height: 20px; padding: 0 6px; font-size: 11px;"><span>inherit</span></div></div>
+          <div style="display: flex; gap: 3px;"><div class="lx-mini on"><svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="#fff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M1 6s2-3.5 5-3.5S11 6 11 6s-2 3.5-5 3.5S1 6 1 6z"></path><circle cx="6" cy="6" r="1.5" fill="#fff" stroke="none"></circle></svg></div><div class="lx-mini"><svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="#ccc" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7.5l3-3 3 3"></path></svg></div><div class="lx-mini"><svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="#ccc" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4.5l3 3 3-3"></path></svg></div></div>
+        </div>
+        <div class="lx-row" style="flex-direction: row; align-items: center; gap: 8px;">
+          <div style="width: 44px; height: 44px; border-radius: 3px; border: 1px solid #2b2b33; background: #30638e;"></div>
+          <div class="lx-name">Ink 3</div>
+          <div class="lx-col"><label>angle</label><div class="lx-num">135°</div></div>
+          <div class="lx-col"><label>freq</label><div class="lx-num">1.00</div></div>
+          <div class="lx-col"><label>pattern</label><div class="lx-select" style="height: 20px; padding: 0 6px; font-size: 11px;"><span>lines</span></div></div>
+          <div style="display: flex; gap: 3px;"><div class="lx-mini on"><svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="#fff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M1 6s2-3.5 5-3.5S11 6 11 6s-2 3.5-5 3.5S1 6 1 6z"></path><circle cx="6" cy="6" r="1.5" fill="#fff" stroke="none"></circle></svg></div><div class="lx-mini"><svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="#ccc" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7.5l3-3 3 3"></path></svg></div><div class="lx-mini"><svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="#ccc" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4.5l3 3 3-3"></path></svg></div></div>
+        </div>
+        <div class="lx-row" style="flex-direction: row; align-items: center; gap: 8px;">
+          <div style="width: 44px; height: 44px; border-radius: 3px; border: 1px solid #2b2b33; background: #1b1b25;"></div>
+          <div class="lx-name">Ink 4</div>
+          <div class="lx-col"><label>angle</label><div class="lx-num">45°</div></div>
+          <div class="lx-col"><label>freq</label><div class="lx-num">1.00</div></div>
+          <div class="lx-col"><label>pattern</label><div class="lx-select" style="height: 20px; padding: 0 6px; font-size: 11px;"><span>inherit</span></div></div>
+          <div style="display: flex; gap: 3px;"><div class="lx-mini on"><svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="#fff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M1 6s2-3.5 5-3.5S11 6 11 6s-2 3.5-5 3.5S1 6 1 6z"></path><circle cx="6" cy="6" r="1.5" fill="#fff" stroke="none"></circle></svg></div><div class="lx-mini"><svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="#ccc" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7.5l3-3 3 3"></path></svg></div><div class="lx-mini"><svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="#ccc" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4.5l3 3 3-3"></path></svg></div></div>
+        </div>
+        <div style="display: flex; gap: 8px;">
+          <div class="lx-btn" style="height: 28px; flex: 1; justify-content: center;">+ Ink</div>
+          <div class="lx-btn" style="height: 28px; flex: 1; justify-content: center;">Palette <svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="#7a7a86" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4.5l3 3 3-3"></path></svg></div>
+          <div class="lx-btn" style="height: 28px; flex: 1; justify-content: center; color: #7a7a86;">seed 0</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Render bar -->
+  <div style="height: 48px; flex: 0 0 48px; border-top: 1px solid #2b2b33; background: #101014; display: flex; align-items: center; gap: 12px; padding: 0 14px;">
+    <div class="lx-btn accent" style="height: 32px; border-color: #e8a33d;">Render…</div>
+    <div style="color: #aaa;">dusk_card_v3_fx.mov</div>
+    <div style="flex: 1; height: 8px; background: #1e1e25; border: 1px solid #2b2b33; border-radius: 4px; position: relative; overflow: hidden;">
+      <div style="position: absolute; left: 0; top: 0; bottom: 0; width: 23.7%; background: #e8a33d;"></div>
+    </div>
+    <div style="font: 12px/1 monospace; color: #eee;">frame 57 / 240 · 3.1 fps · eta 0:59</div>
+    <div class="lx-btn" style="height: 32px;">Cancel</div>
+    <div class="lx-btn" style="height: 32px; color: #7a7a86;">Open folder</div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

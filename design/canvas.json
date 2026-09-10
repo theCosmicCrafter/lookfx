@@ -1,0 +1,32 @@
+{
+  "artboards": [
+    {
+      "file": "Main.dc.html",
+      "title": "Flare selected",
+      "x": 0,
+      "y": 0,
+      "w": 1440,
+      "h": 900
+    },
+    {
+      "file": "PrintLook.dc.html",
+      "title": "Print Look selected",
+      "x": 1560,
+      "y": 0,
+      "w": 1440,
+      "h": 900
+    }
+  ],
+  "annotations": [
+    {
+      "id": "layout-note",
+      "x": 0,
+      "y": -360,
+      "w": 640,
+      "text": "lookfx — desktop shell\n\nLeft: source / depth / output + ordered effect stack (enable, solo, reorder).\nCenter: viewport = generalised PointPicker (light, anchor, solved track path, search ring) over the live preview; transport with in/out marks; play steps cached frames only.\nRight: the selected effect's panel — the ported Flarecore editor or the ported CMYK Magic panel.\nBottom: render job bar (SSE progress, cancel, open folder).\n\nPalette, radii, control heights lifted from Flarecore's .fcore stylesheet (#131317 / #1a1a20 / #e8a33d, 3–4 px radii, 36 px buttons, 44 px chips)."
+    }
+  ],
+  "launch": {
+    "view": "canvas"
+  }
+}

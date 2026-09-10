@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "lookfx"
+version = "0.1.0"
+description = "Standalone stills+video FX app: procedural lens flares (Flarecore) and custom-ink halftone print looks (CMYK Magic)."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "Apache-2.0" }
+dependencies = [
+    "torch",
+    "numpy",
+    "Pillow",
+    "fastapi",
+    "uvicorn",
+]
+
+[project.optional-dependencies]
+app = ["pywebview"]
+dev = ["pytest", "httpx"]
+
+[project.scripts]
+lookfx = "lookfx.cli:main"
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["lookfx_core*", "flarecore*", "cmykmagic*", "lookfx*"]
+
+[tool.setuptools.package-data]
+flarecore = ["presets/*.json", "elements/**/*.png", "prompts/*.json", "LICENSE", "VENDORED.md"]
+cmykmagic = ["LICENSE", "VENDORED.md"]
+lookfx = ["web/**/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests", "src/flarecore/tests", "src/cmykmagic/tests"]
+addopts = "-q"
