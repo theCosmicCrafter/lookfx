@@ -22,12 +22,25 @@ from .probe import MediaInfo, probe
 
 BYTES_PER_PIXEL = 6   # rgb48le
 
+# ffprobe color_space tag -> swscale in_color_matrix name
+_MATRIX = {"bt709": "bt709", "bt470bg": "bt470", "smpte170m": "smpte170m", "smpte240m": "smpte240m",
+           "bt2020nc": "bt2020", "bt2020c": "bt2020", "fcc": "fcc"}
+
+
+def _linear_input_args(path: str | None) -> list[str]:
+    """EXR is linear float; have the decoder apply the sRGB transfer so the
+    pipe stays display-referred like every other source."""
+    if path and path.lower().endswith(".exr"):
+        return ["-apply_trc", "iec61966_2_1"]
+    return []
+
 
 def _input_args(info: MediaInfo, tmpdir: str | None) -> list[str]:
     if info.kind == "sequence":
         if info.pattern:
-            return ["-framerate", f"{info.fps.numerator}/{info.fps.denominator}",
-                    "-start_number", str(info.start_number), "-i", info.pattern]
+            return _linear_input_args(info.pattern) + [
+                "-framerate", f"{info.fps.numerator}/{info.fps.denominator}",
+                "-start_number", str(info.start_number), "-i", info.pattern]
         # arbitrary file list -> concat demuxer
         lst = Path(tmpdir or tempfile.gettempdir()) / f"lookfx_concat_{abs(hash(info.path)) & 0xffffff:06x}.txt"
         lines = []
@@ -36,7 +49,19 @@ def _input_args(info: MediaInfo, tmpdir: str | None) -> list[str]:
             lines.append(f"file '{esc}'")
         lst.write_text("\n".join(lines) + "\n", encoding="utf-8")
         return ["-f", "concat", "-safe", "0", "-r", f"{info.fps.numerator}/{info.fps.denominator}", "-i", str(lst)]
-    return ["-i", info.path]
+    return _linear_input_args(info.path) + ["-i", info.path]
+
+
+def _colour_filter(info: MediaInfo) -> str | None:
+    """YUV -> RGB with the source's tagged matrix; untagged HD is BT.709 (what
+    players assume), untagged SD keeps swscale's BT.601 default."""
+    pf = (info.pix_fmt or "").lower()
+    if not pf or "rgb" in pf or "gbr" in pf or "bgr" in pf or pf.startswith("pal") or pf.startswith("gray"):
+        return None
+    matrix = _MATRIX.get((info.color_space or "").lower())
+    if matrix is None and (info.height >= 720 or info.width >= 1280):
+        matrix = "bt709"
+    return f"scale=in_color_matrix={matrix}" if matrix else None
 
 
 class FrameSource:
@@ -74,6 +99,9 @@ class FrameSource:
     def _decode_args(self) -> list[str]:
         args = _input_args(self.info, self.scratch_dir)
         vf = []
+        cf = _colour_filter(self.info)
+        if cf:
+            vf.append(cf)
         if self.start > 0 or self.stop is not None:
             end = "" if self.stop is None else f":end_frame={self.stop}"
             vf.append(f"trim=start_frame={self.start}{end}")
@@ -138,11 +166,12 @@ class FrameSource:
         self.stop = self.start + offset   # true count once seen
 
     # -- random access --------------------------------------------------------
-    def cache(self):
-        """Decode once into a uint16 memmap for repeated random access."""
+    def cache(self, ctx=None):
+        """Decode once into a uint16 memmap for repeated random access.
+        ``ctx`` (a RunContext) is polled for cancellation after every frame."""
         if self._cache is None:
             from .clipcache import ClipCache
-            self._cache = ClipCache.build(self, self.scratch_dir)
+            self._cache = ClipCache.build(self, self.scratch_dir, ctx=ctx)
             self.stop = self.start + self._cache.count
             self.info.nb_frames = self.info.nb_frames or self.stop
         return self._cache
@@ -164,8 +193,9 @@ class FrameSource:
 
 
 def open_source(path: str | Path, *, start: int = 0, count: int | None = None,
-                stop: int | None = None, scratch_dir: str | None = None) -> FrameSource:
-    info = probe(path)
+                stop: int | None = None, scratch_dir: str | None = None, fps=None) -> FrameSource:
+    """``fps`` overrides the rate of stills/sequences (see ``probe``)."""
+    info = probe(path, fps=fps)
     if count is not None and stop is None:
         stop = start + count
     return FrameSource(info, start=start, stop=stop, scratch_dir=scratch_dir)

@@ -65,15 +65,13 @@ def render_frames(frames: torch.Tensor, chain: list[ChainStep] | list[dict],
 
 def render_still(src: str | Path, dst: str | Path, chain, ctx: RunContext | None = None,
                  aux_out: dict[str, str | Path] | None = None) -> Path:
+    from .pipeline import _as_frames   # same plates-strip layout as run_project
     frames = read_image(src)
     out, extras = render_frames(frames, chain, ctx)
     write_image(dst, out)
     for name, path in (aux_out or {}).items():
         if name in extras:
-            t = extras[name]
-            if t.dim() == 3:              # masks -> grey
-                t = t[..., None].expand(-1, -1, -1, 3)
-            write_image(path, t[0])
+            write_image(path, _as_frames(extras[name], 1)[0])
     return Path(dst)
 
 
