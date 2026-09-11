@@ -1,6 +1,8 @@
 """lookfx_core: params, chain, project, chunking, colorspace, device."""
 
 import json
+import os
+import shutil
 
 import pytest
 import torch
@@ -195,3 +197,48 @@ def test_get_device_falls_back_to_cpu(monkeypatch):
         device.reset_cuda_check()
     # the probe is cached: one result per process until reset
     assert device.cuda_usable() is device.cuda_usable()
+
+
+# --- 0.1.1: relative media paths in project files ---------------------------------
+
+def test_project_saves_relative_paths_and_survives_a_folder_move(tmp_path):
+    shot = tmp_path / "shot"
+    (shot / "plates").mkdir(parents=True)
+    clip, depth = shot / "plates" / "clip.mkv", shot / "depth.png"
+    clip.write_bytes(b"x")
+    depth.write_bytes(b"x")
+    proj = Project(input={"path": str(clip), "range": [0, None]}, aux={"depth": {"path": str(depth)}, "none": None})
+    pfile = shot / "shot.lookfx.json"
+    proj.save(pfile)
+    doc = json.loads(pfile.read_text(encoding="utf-8"))
+    # absolute path plus path_rel (posix separators, relative to the project folder)
+    assert doc["input"]["path"] == str(clip) and doc["input"]["path_rel"] == "plates/clip.mkv"
+    assert doc["aux"]["depth"]["path_rel"] == "depth.png" and doc["aux"]["none"] is None
+    # to_json keeps path_rel so the UI round-trips it untouched
+    assert Project.load(pfile).to_json()["input"]["path_rel"] == "plates/clip.mkv"
+    # the absolute path wins while it exists (even when a path_rel would resolve elsewhere)
+    other = tmp_path / "elsewhere"
+    (other / "plates").mkdir(parents=True)
+    (other / "plates" / "clip.mkv").write_bytes(b"y")
+    p2 = Project.load(pfile)
+    assert p2.resolve_paths(other) == [] and p2.input["path"] == str(clip)
+    # moving the project folder together with its media: path_rel resolves against the new folder
+    moved = tmp_path / "moved"
+    shutil.move(str(shot), str(moved))
+    p3 = Project.load(moved / "shot.lookfx.json")
+    assert p3.resolve_paths(moved) == []
+    assert p3.input["path"] == str((moved / "plates" / "clip.mkv").resolve())
+    assert p3.aux["depth"]["path"] == str((moved / "depth.png").resolve())
+    # a project file next to a copied clip but without path_rel still uses the tail fallback
+    p4 = Project(input={"path": "Z:/gone/plates/clip.mkv"})
+    assert p4.resolve_paths(moved) == [] and p4.input["path"].endswith("clip.mkv")
+    # neither path exists: reported missing (path_rel named when there is no absolute path)
+    p5 = Project(input={"path_rel": "nope/clip.mkv"})
+    assert p5.resolve_paths(moved) == ["nope/clip.mkv"]
+    # saving again rewrites path_rel for the new location; a path on another drive gets none
+    p3.save(moved / "shot.lookfx.json")
+    assert p3.input["path_rel"] == "plates/clip.mkv"
+    if os.name == "nt":
+        p6 = Project(input={"path": "Q:/far/away/clip.mkv", "path_rel": "stale"})
+        p6.relativize_paths(moved)
+        assert "path_rel" not in p6.input and p6.input["path"] == os.path.abspath("Q:/far/away/clip.mkv")

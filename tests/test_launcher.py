@@ -205,3 +205,32 @@ def test_resolve_open_target(launcher, tmp_path):
     assert launcher.resolve_open_target(str(tmp_path / "missing.mov")) is None
     assert launcher.resolve_open_target("https://example.com") is None
     assert launcher.resolve_open_target("") is None and launcher.resolve_open_target(None) is None
+
+
+# --- 0.1.1: cross-platform launch files and the browser fallback message ----------
+
+def test_no_window_hint_is_platform_neutral(launcher):
+    msg = launcher.NO_WINDOW_HINT.format(why="pywebview not installed")
+    assert "pywebview not installed" in msg and "browser" in msg and "WebView2" not in msg
+    assert "WebView2" in launcher.WEBVIEW2_HINT           # the Windows-specific hint stays for that case
+
+
+@pytest.mark.parametrize("name", ["setup.sh", "run.sh"])
+def test_shell_launchers_exist_and_are_executable(name):
+    import shutil
+    import subprocess
+    script = ROOT / name
+    assert script.is_file()
+    text = script.read_text(encoding="utf-8")
+    assert text.startswith("#!/usr/bin/env bash") and "\r" not in text, "bash scripts must be LF"
+    if name == "setup.sh":
+        assert "requirements-lock.txt" in text and "--no-deps -e ." in text and "cu128" in text
+    else:
+        assert "main.py" in text
+    mode = subprocess.run(["git", "ls-files", "-s", name], cwd=str(ROOT), capture_output=True, text=True)
+    if mode.returncode == 0 and mode.stdout.strip():
+        assert mode.stdout.split()[0] == "100755", f"{name} is not marked executable in git"
+    bash = shutil.which("bash")
+    if bash:
+        r = subprocess.run([bash, "-n", str(script)], capture_output=True, text=True)
+        assert r.returncode == 0, r.stderr

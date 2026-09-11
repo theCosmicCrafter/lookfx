@@ -17,8 +17,8 @@ SCHEMA_VERSION = 1
 
 @dataclass
 class Project:
-    input: dict = field(default_factory=dict)      # {"path", "range": [start, stop|None]}
-    aux: dict = field(default_factory=dict)        # {"depth": {"path": ...}}
+    input: dict = field(default_factory=dict)      # {"path", "path_rel", "range": [start, stop|None], "fps"}
+    aux: dict = field(default_factory=dict)        # {"depth": {"path": ..., "path_rel": ...}}
     output: dict = field(default_factory=dict)     # {"path", "codec", "audio", "aux": {name: path}}
     chain: list[ChainStep] = field(default_factory=list)
     app: dict = field(default_factory=dict)
@@ -47,13 +47,41 @@ class Project:
                    app=dict(d.get("app") or {}),
                    solves=dict(solves) if isinstance(solves, dict) else {})
 
+    def _media_specs(self) -> list[dict]:
+        return [self.input] + [s for s in self.aux.values() if isinstance(s, dict)]
+
+    def relativize_paths(self, base: str | Path) -> None:
+        """Make every media path absolute and add ``path_rel``, the same path
+        relative to ``base`` (the project file's folder) with posix separators,
+        when both are on the same drive; ``path_rel`` is dropped otherwise. Run by
+        ``save`` so a folder holding the project and its media moves as a unit."""
+        base = os.path.abspath(str(base))
+        for spec in self._media_specs():
+            p = spec.get("path")
+            if not p:
+                spec.pop("path_rel", None)
+                continue
+            ap = os.path.abspath(str(p))
+            spec["path"] = ap
+            try:
+                same_drive = os.path.normcase(os.path.splitdrive(ap)[0]) == os.path.normcase(os.path.splitdrive(base)[0])
+                rel = os.path.relpath(ap, base) if same_drive else None
+            except ValueError:          # different drives / mounts on Windows
+                rel = None
+            if rel is None:
+                spec.pop("path_rel", None)
+            else:
+                spec["path_rel"] = Path(rel).as_posix()
+
     def save(self, path: str | Path, backup: bool = False) -> None:
         """Write atomically: the JSON goes to a sibling temp file that is moved
         onto ``path`` (``os.replace``), so a crash mid-write never leaves a
         truncated project. With ``backup`` the previous file is kept once as
-        ``<path>.bak`` (older backups are replaced)."""
+        ``<path>.bak`` (older backups are replaced). Media paths are written
+        absolute plus ``path_rel`` (see ``relativize_paths``)."""
         target = Path(path)
         target.parent.mkdir(parents=True, exist_ok=True)
+        self.relativize_paths(target.resolve().parent)
         tmp = target.with_name(f".{target.name}.{uuid.uuid4().hex[:8]}.tmp")
         try:
             tmp.write_text(json.dumps(self.to_json(), indent=2), encoding="utf-8")
@@ -69,16 +97,26 @@ class Project:
 
     def resolve_paths(self, base: str | Path) -> list[str]:
         """Re-point missing input/aux paths at files found next to the project
-        file (``base`` is its folder): a relative path as is, else the longest
-        tail of the path that exists under ``base`` (``.../shots/a/clip.mkv``
-        matches ``<base>/shots/a/clip.mkv``, then ``<base>/a/clip.mkv``, then
-        ``<base>/clip.mkv``). Returns the paths still missing."""
+        file (``base`` is its folder). The absolute ``path`` wins while it exists;
+        else ``path_rel`` (written by ``save``) resolved against ``base``; else a
+        relative path as is, else the longest tail of the path that exists under
+        ``base`` (``.../shots/a/clip.mkv`` matches ``<base>/shots/a/clip.mkv``,
+        then ``<base>/a/clip.mkv``, then ``<base>/clip.mkv``). Returns the paths
+        still missing."""
         base = Path(base)
         missing: list[str] = []
-        specs = [self.input] + [s for s in self.aux.values() if isinstance(s, dict)]
-        for spec in specs:
+        for spec in self._media_specs():
             p = spec.get("path")
-            if not p or Path(p).exists():
+            rel = spec.get("path_rel")
+            if not p and not rel:
+                continue
+            if p and Path(p).exists():
+                continue
+            if rel and (base / rel).exists():
+                spec["path"] = str((base / rel).resolve())
+                continue
+            if not p:
+                missing.append(str(rel))
                 continue
             pp = Path(p)
             parts = pp.parts[1:] if pp.is_absolute() else pp.parts

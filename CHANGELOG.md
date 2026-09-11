@@ -8,6 +8,48 @@ on the commit that bumps `src/lookfx/__init__.py` (see README, *Contributing →
 
 Nothing yet.
 
+## [0.1.1] - 2026-09-11
+
+HDR sources, sequence / still frame rates, output naming, relative project paths and a
+first (untested) macOS / Linux launch path.
+
+### Added
+- **HDR sources are tone-mapped to SDR on decode**: a clip whose transfer is PQ / HLG or whose
+  primaries are BT.2020 goes through ffmpeg's `zscale` + `tonemap` chain to BT.709 before it
+  reaches the engines. `MediaInfo` gains `hdr` and `tonemapped`; the media info the server
+  returns carries them and the source header shows an *HDR → SDR (tone-mapped)* badge.
+- **Frame rate for stills and image sequences**: `input.fps` in the project (an fps field in
+  the source header) sets their rate; the server re-decodes only when it changed for a still
+  or sequence (a video's rate is intrinsic; the field is hidden for videos). The media info
+  reports `fps_override`.
+- **Output naming**: output preferences in `settings.json` (`output.mode` source / folder /
+  project, `output.folder`, `output.template`, `output.project_mode`, `output.project_folder`;
+  Settings screen) and `POST /api/output/suggest`, which pre-fills the render dialog and
+  *Save as…* with the next free version of a template — `{clip}_{look}_v{ver}` by default,
+  with `{clip}` the source stem, `{look}` the first enabled flare preset (else the first effect
+  id) slugified, `{ver}` the next unused 3-digit version in the target folder, `{date}` and
+  `{project}`; never the source clip itself. Template logic lives in `lookfx.output_names`.
+  `GET /api/settings/defaults` reports the per-platform Videos / Documents folders
+  (Windows shell folders, `~/Movies` on macOS, XDG user dirs on Linux) the preferences seed from.
+- **Audio sidecar for sequence outputs**: a full-range render to a `*_seq` codec of a clip with
+  audio writes `<sequence stem>.wav` (PCM 16-bit) next to the frames; `RunReport.aux_outputs["audio"]`
+  and the job result name it, the Queue's *Open folder* reveals it.
+- **Relative media paths in project files**: `Project.save` writes `path` absolute and adds
+  `path_rel` (relative to the project folder, posix separators, same drive only) for the input
+  and every aux source; opening prefers the absolute path when it exists, else `path_rel`
+  against the project's folder, else the existing name-next-to-the-project fallback. The
+  save endpoint returns the saved document.
+- **macOS / Linux (untested)**: `setup.sh` / `run.sh` mirror the batch files (Python 3.12 venv,
+  torch from the CUDA 12.8 index on Linux or the PyPI wheel on macOS, the locked set, editable
+  install, ffmpeg check); the launcher's no-window fallback message is platform-neutral.
+  README documents the path and the Known limitations reflect this release.
+
+### Changed
+- Ranged renders reuse a covering whole-clip solve sliced to the range instead of re-solving
+  (documented; the reuse landed in 0.1.0).
+- `PUT /api/project/{pid}` ignores `path_rel` when deciding whether the media changed, so a
+  page that round-trips a freshly saved document does not trigger a proxy job.
+
 ## [0.1.0] - 2026-09-11
 
 First public work-in-progress release.
