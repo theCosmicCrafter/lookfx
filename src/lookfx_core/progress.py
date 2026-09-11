@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import threading
+from contextlib import nullcontext
 from dataclasses import dataclass, field
 from typing import Callable
 
@@ -36,6 +37,14 @@ class RunContext:
     fps: float | None = None
     total_frames: int | None = None
     scratch_dir: str | None = None
+    # Optional lock the pipeline holds only while a chunk is on the device
+    # (analysis and each ``chain.apply``), so an interactive preview can
+    # interleave with a running render instead of waiting for the whole run.
+    gpu_lock: threading.Lock | None = None
+
+    def gpu(self):
+        """Context manager for device work: the shared GPU lock, or a no-op."""
+        return self.gpu_lock if self.gpu_lock is not None else nullcontext()
 
     def tick(self, stage: str, done: int, total: int, message: str = "") -> None:
         if self.on_progress is not None:

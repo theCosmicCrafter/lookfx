@@ -17,17 +17,22 @@ class ChainStep:
     params: dict = field(default_factory=dict)
     enabled: bool = True
     version: str | None = None
+    id: str | None = None           # optional stable identity (solves follow it across moves)
 
     def to_json(self) -> dict:
         d = {"effect": self.effect, "enabled": self.enabled, "params": self.params}
         if self.version:
             d["version"] = self.version
+        if self.id:
+            d["id"] = self.id
         return d
 
     @classmethod
     def from_json(cls, d: dict) -> "ChainStep":
+        sid = d.get("id")
         return cls(effect=d["effect"], params=dict(d.get("params") or {}),
-                   enabled=bool(d.get("enabled", True)), version=d.get("version"))
+                   enabled=bool(d.get("enabled", True)), version=d.get("version"),
+                   id=str(sid) if sid not in (None, "") else None)
 
 
 class EffectChain:

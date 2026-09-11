@@ -137,3 +137,61 @@ def test_api_render_frames_and_preview():
     assert {e["id"] for e in api.list_effects()} >= {"flare", "print_look"}
     schema = api.effect_schema("flare")
     assert "motion" in schema and any(p["name"] == "position_mode" for p in schema["params"])
+
+
+# --- release audit wave 2: project file, step ids, device fallbacks --------------
+
+def test_project_save_is_atomic_with_backup_and_resolves_paths(tmp_path):
+    proj = Project(input={"path": str(tmp_path / "clip.mkv")}, output={"path": "out.mov"},
+                   chain=[ChainStep("identity", {"gain": 2.0}, id="s1")],
+                   solves={"s1": {"hash": "abc", "media": {"path": "x"}, "state": {"lights": [[]]}}})
+    p = tmp_path / "p.lookfx.json"
+    proj.save(p)
+    assert not list(tmp_path.glob(".p.lookfx.json.*.tmp")) and not (tmp_path / "p.lookfx.json.bak").exists()
+    again = Project.load(p)
+    assert again.chain[0].id == "s1" and again.solves == proj.solves and again.to_json() == proj.to_json()
+    first = p.read_text(encoding="utf-8")
+    proj.chain[0].params["gain"] = 3.0
+    proj.save(p, backup=True)
+    assert (tmp_path / "p.lookfx.json.bak").read_text(encoding="utf-8") == first
+    assert Project.load(p).chain[0].params["gain"] == 3.0
+    # a step without an id round-trips without one; solves are absent from the doc when empty
+    d = ChainStep.from_json({"effect": "identity"}).to_json()
+    assert "id" not in d and "solves" not in Project().to_json()
+    # missing media next to the project file: the same relative path, then just the name
+    (tmp_path / "sub").mkdir()
+    (tmp_path / "sub" / "clip.mkv").write_bytes(b"x")
+    (tmp_path / "depth.png").write_bytes(b"x")
+    proj = Project(input={"path": "Z:/gone/sub/clip.mkv"},
+                   aux={"depth": {"path": "Z:/gone/depth.png"}, "mask": {"path": "Z:/gone/mask.png"}, "none": None})
+    missing = proj.resolve_paths(tmp_path)
+    assert proj.input["path"] == str((tmp_path / "sub" / "clip.mkv").resolve())
+    assert proj.aux["depth"]["path"] == str((tmp_path / "depth.png").resolve())
+    assert missing == ["Z:/gone/mask.png"]
+    proj = Project(input={"path": "sub/clip.mkv"})
+    assert proj.resolve_paths(tmp_path) == [] and proj.input["path"].endswith("clip.mkv")
+
+
+def test_get_device_falls_back_to_cpu(monkeypatch):
+    import lookfx_core.device as device
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
+    device.reset_cuda_check()
+    try:
+        assert get_device("cuda").type == "cpu"
+        monkeypatch.setenv("LOOKFX_DEVICE", "cuda")
+        assert get_device().type == "cpu" and device.device_note() is None
+        monkeypatch.delenv("LOOKFX_DEVICE")
+        # a driver-visible card older than every arch in the wheel (robust-7)
+        monkeypatch.setattr(torch.cuda, "is_available", lambda: True)
+        monkeypatch.setattr(torch.cuda, "get_device_capability", lambda *_: (6, 1))
+        monkeypatch.setattr(torch.cuda, "get_arch_list", lambda: ["sm_75", "sm_80", "sm_90", "sm_120"])
+        monkeypatch.setattr(torch.cuda, "get_device_name", lambda *_: "GeForce GTX 1080")
+        device.reset_cuda_check()
+        ok, why = device.cuda_usable()
+        assert not ok and "sm_61" in why and "GTX 1080" in why
+        assert get_device().type == "cpu" and get_device("cuda").type == "cpu"
+        assert device.device_note() == why
+    finally:
+        device.reset_cuda_check()
+    # the probe is cached: one result per process until reset
+    assert device.cuda_usable() is device.cuda_usable()
