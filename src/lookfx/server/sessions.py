@@ -9,6 +9,7 @@ import shutil
 import tempfile
 import threading
 import uuid
+from fractions import Fraction
 from pathlib import Path
 from typing import Any
 
@@ -163,7 +164,7 @@ class ProjectSession:
         if not spec["path"]:
             self.close_media()
             return {"frames": 0}
-        if self.source is None or spec != self._opened_input:
+        if self.source is None or self._spec_changed(spec):
             self._close_source()
             src = open_source(spec["path"], start=start, stop=stop, scratch_dir=self.scratch_dir, fps=spec["fps"])
             self._check_scratch(src)
@@ -172,7 +173,10 @@ class ProjectSession:
             src.cache(ctx)
             self.source, self._opened_input = src, spec
             self._adopt_pending_solves()
-        wanted = {name: dict(s) for name, s in (self.project.aux or {}).items() if s and s.get("path")}
+        # path_rel is bookkeeping written by Project.save; it must not read as
+        # a changed aux and trigger a re-decode
+        wanted = {name: {k: v for k, v in s.items() if k != "path_rel"}
+                  for name, s in (self.project.aux or {}).items() if s and s.get("path")}
         for name in list(self.aux):
             if wanted.get(name) != self._opened_aux.get(name):
                 self.aux.pop(name).close()
@@ -187,6 +191,21 @@ class ProjectSession:
         if ctx:
             ctx.tick("proxy", 1, 1)
         return self.media_info()
+
+    def _spec_changed(self, spec: dict) -> bool:
+        """Does ``spec`` need a fresh decode of the open source? ``fps`` only
+        matters for stills and sequences (it is their rate); a video's rate is
+        intrinsic, so an ``input.fps`` edit leaves its cache (and solves) alone."""
+        old = self._opened_input
+        if old is None:
+            return True
+        if spec == old:
+            return False
+        if self.source is not None and self.source.info.kind == "video":
+            if {k: v for k, v in spec.items() if k != "fps"} == {k: v for k, v in old.items() if k != "fps"}:
+                self._opened_input = spec          # remember the edit, keep the decode
+                return False
+        return True
 
     def _close_source(self):
         if self.source is not None:
@@ -217,8 +236,19 @@ class ProjectSession:
             return {"frames": 0}
         i = self.source.info
         # start/stop: the window of the source this session decoded (input.range);
-        # frame numbers in previews/solves are relative to it, /api/render ranges absolute
+        # frame numbers in previews/solves are relative to it, /api/render ranges absolute.
+        # hdr / tonemapped come from the probe (an HDR source is tone-mapped to SDR on
+        # decode); fps_override is the project's input.fps for stills and sequences.
+        fps_over = getattr(i, "fps_override", None)
+        if fps_over is None and i.kind != "video" and self._opened_input:
+            fps_over = self._opened_input.get("fps")
+        try:                              # "30000/1001" strings are accepted like in probe()
+            fps_over = float(Fraction(str(fps_over))) if fps_over not in (None, "", 0) else None
+        except (ValueError, ZeroDivisionError):
+            fps_over = None
         return {"kind": i.kind, "path": i.path, "frames": self.source.nb_frames, "fps": float(i.fps),
+                "fps_override": fps_over,
+                "hdr": bool(getattr(i, "hdr", False)), "tonemapped": bool(getattr(i, "tonemapped", False)),
                 "width": i.width, "height": i.height, "has_audio": i.has_audio,
                 "start": self.source.start, "stop": self.source.stop, "source_frames": i.nb_frames,
                 "aux": {k: {"frames": v.nb_frames, "width": v.width, "height": v.height} for k, v in self.aux.items()}}

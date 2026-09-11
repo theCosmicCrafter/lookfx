@@ -9,6 +9,7 @@ import os
 import queue
 import socket
 import subprocess
+import sys
 import threading
 import time
 from pathlib import Path
@@ -28,6 +29,7 @@ from lookfx_core.device import get_device, device_note
 from flarecore.presets_io import PresetExists
 
 from .. import api, __version__
+from .. import output_names
 from ..pipeline import run_project
 from .jobs import JobRunner, JobQueueFull
 from .sessions import Sessions, cache_dir
@@ -77,6 +79,16 @@ class RenderBody(BaseModel):
     stack: list[dict] | None = None
     output: dict | None = None
     range: list | None = None
+
+
+class SuggestBody(BaseModel):
+    """``POST /api/output/suggest``: where the next render (or Save as) should go."""
+    project_id: str
+    template: str | None = None        # default "{clip}_{look}_v{ver}" (see lookfx.output_names)
+    mode: str = "source"               # "source" | "folder" | "project"
+    folder: str | None = None          # for mode "folder" (created on demand)
+    ext: str | None = None             # ".mov", ".png", ".lookfx.json"; by kind when omitted
+    kind: str = "render"               # "render" | "project"
 
 
 class SavePresetBody(BaseModel):
@@ -162,6 +174,65 @@ def sweep_stale_caches(scratch_dir: str | None, older_than: float) -> list[Path]
     if removed:
         log.info("removed %d stale clip cache(s) from %s", len(removed), d)
     return removed
+
+
+def _known_folder(name: str) -> Path | None:
+    """A Windows known folder through the shell API (``SHGetKnownFolderPath``),
+    so a Videos / Documents folder the user moved is still found; None elsewhere
+    or when the call fails."""
+    if os.name != "nt":
+        return None
+    try:
+        import ctypes
+        from ctypes import wintypes
+        guids = {"Videos": "{18989B1D-99B5-455B-841C-AB7C74E4DDFC}",
+                 "Documents": "{FDD39AD0-238F-46AF-ADB4-6C85480369C7}"}
+
+        class GUID(ctypes.Structure):
+            _fields_ = [("Data1", wintypes.DWORD), ("Data2", wintypes.WORD), ("Data3", wintypes.WORD),
+                        ("Data4", wintypes.BYTE * 8)]
+        g = GUID()
+        ctypes.windll.ole32.CLSIDFromString(guids[name], ctypes.byref(g))
+        out = ctypes.c_wchar_p()
+        if ctypes.windll.shell32.SHGetKnownFolderPath(ctypes.byref(g), 0, None, ctypes.byref(out)) != 0:
+            return None
+        try:
+            return Path(out.value) if out.value else None
+        finally:
+            ctypes.windll.ole32.CoTaskMemFree(out)
+    except Exception:  # noqa: BLE001 — any shell/ctypes trouble: fall back to the profile folder
+        return None
+
+
+def _xdg_user_dir(key: str) -> Path | None:
+    """``XDG_<KEY>_DIR`` from ``~/.config/user-dirs.dirs`` (Linux desktops)."""
+    cfg = Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config") / "user-dirs.dirs"
+    try:
+        for line in cfg.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if line.startswith(f"XDG_{key}_DIR="):
+                val = line.split("=", 1)[1].strip().strip('"')
+                return Path(val.replace("$HOME", str(Path.home())))
+    except OSError:
+        pass
+    return None
+
+
+def user_media_dirs() -> dict:
+    """``{"videos_dir", "documents_dir"}`` for this user, per platform: the
+    Windows shell folders (else ``%USERPROFILE%/Videos`` / ``Documents``),
+    ``~/Movies`` / ``~/Documents`` on macOS, the XDG user dirs on Linux with
+    ``~/Videos`` / ``~/Documents`` as the fallback. The folders need not exist."""
+    home = Path(os.environ.get("USERPROFILE") or Path.home()) if os.name == "nt" else Path.home()
+    if os.name == "nt":
+        videos = _known_folder("Videos") or home / "Videos"
+        docs = _known_folder("Documents") or home / "Documents"
+    elif sys.platform == "darwin":
+        videos, docs = home / "Movies", home / "Documents"
+    else:
+        videos = _xdg_user_dir("VIDEOS") or home / "Videos"
+        docs = _xdg_user_dir("DOCUMENTS") or home / "Documents"
+    return {"videos_dir": str(videos), "documents_dir": str(docs)}
 
 
 _WRITE_LOCK = threading.Lock()
@@ -426,7 +497,10 @@ def create_app(scratch_dir: str | None = None, token: str | None = None) -> Fast
         except (ValueError, KeyError, TypeError) as e:
             raise HTTPException(400, str(e))
         new.solves = {}                  # the session's live solves are authoritative
-        media_changed = (new.input != s.project.input) or (new.aux != s.project.aux)
+        # ``path_rel`` is bookkeeping written by save; only the decode spec matters
+        # (the session itself re-decodes only when path / range / fps changed)
+        media_changed = (_sans_rel(new.input) != _sans_rel(s.project.input)) or (
+            {k: _sans_rel(v) for k, v in new.aux.items()} != {k: _sans_rel(v) for k, v in s.project.aux.items()})
         s.project = new
         job = _submit_proxy(s) if media_changed and new.input.get("path") else None
         return {"ok": True, "proxy_job": job.id if job else None}
@@ -463,7 +537,49 @@ def create_app(scratch_dir: str | None = None, token: str | None = None) -> Fast
             s.project.solves = {}
         s.path = Path(body.path)
         bak = Path(body.path + ".bak")
-        return {"path": body.path, "backup": str(bak) if body.backup and bak.is_file() else None}
+        # the saved document (absolute media paths plus ``path_rel``) so the page can adopt it
+        return {"path": body.path, "backup": str(bak) if body.backup and bak.is_file() else None,
+                "project": s.project.to_json()}
+
+    @app.post("/api/output/suggest")
+    def output_suggest(body: SuggestBody):
+        """The next free ``{clip}_{look}_v{ver}``-style path for a render (or a
+        project file, ``kind: "project"``): mode ``source`` puts it next to the
+        source clip, ``folder`` in ``body.folder`` (created on demand), ``project``
+        next to the project file (next to the source while unsaved). The version
+        scans that folder for earlier files of the same template; the path is
+        never the source clip itself."""
+        s = _session(sessions, body.project_id)
+        if body.mode not in ("source", "folder", "project"):
+            raise HTTPException(400, f"unknown mode {body.mode!r}")
+        if body.kind not in ("render", "project"):
+            raise HTTPException(400, f"unknown kind {body.kind!r}")
+        ext = body.ext or (".lookfx.json" if body.kind == "project" else ".mov")
+        if not ext.startswith("."):
+            ext = "." + ext
+        source = s.project.input.get("path") or None
+        source_dir = _source_folder(source) if source else None
+        if body.mode == "folder":
+            if not body.folder:
+                raise HTTPException(400, "folder is required for mode 'folder'")
+            # absolute only: a relative folder would be created next to the
+            # server process (the repo, in the shipped launcher)
+            folder = Path(body.folder)
+            if not folder.is_absolute():
+                raise HTTPException(400, f"folder must be an absolute path, got {body.folder!r}")
+        elif body.mode == "project" and s.path is not None:
+            folder = Path(s.path).resolve().parent
+        else:
+            folder = source_dir or Path(user_media_dirs()["videos_dir"]) / "LookFX"
+        try:
+            folder.mkdir(parents=True, exist_ok=True)
+        except OSError as e:
+            raise HTTPException(400, f"cannot create folder {folder}: {_error_detail(e)}")
+        tokens = {"clip": output_names.clip_stem(source), "look": output_names.look_of(s.project.chain),
+                  "date": output_names.today(), "project": output_names.project_stem(s.path)}
+        path, version = output_names.suggest_path(folder, body.template or output_names.DEFAULT_TEMPLATE,
+                                                  tokens, ext, avoid=source)
+        return {"path": str(path), "version": version, "folder": str(folder)}
 
     @app.delete("/api/project/{pid}")
     def project_close(pid: str):
@@ -601,6 +717,11 @@ def create_app(scratch_dir: str | None = None, token: str | None = None) -> Fast
             raise HTTPException(500, f"cannot write settings: {_error_detail(e)}")
         return body
 
+    @app.get("/api/settings/defaults")
+    def settings_defaults():
+        """Per-platform user folders the UI seeds its output preferences from."""
+        return user_media_dirs()
+
     @app.get("/api/jobs/{job_id}")
     async def job_get(job_id: str):
         job = jobs.get(job_id)
@@ -667,6 +788,16 @@ def shutdown(app: FastAPI, timeout: float = 30.0) -> None:
     # caches this process created but could not close (a job still holding one
     # past the timeout) are swept by the next launch; anything unlinkable now goes
     sweep_stale_caches(sessions.scratch_dir, time.time())
+
+
+def _sans_rel(spec):
+    return {k: v for k, v in spec.items() if k != "path_rel"} if isinstance(spec, dict) else spec
+
+
+def _source_folder(source: str) -> Path:
+    """The folder a render lands in for output mode ``source``: the clip's
+    folder (the parent of a directory sequence, never inside the frames)."""
+    return Path(os.path.abspath(source)).parent
 
 
 def _session(sessions: Sessions, pid: str):

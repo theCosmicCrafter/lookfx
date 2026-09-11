@@ -3,7 +3,10 @@
     python main.py [media-or-project-path]
 
 Falls back to the default browser when pywebview (or the WebView2 runtime it
-needs on Windows) is not installed. Logs to %LOCALAPPDATA%\\lookfx\\lookfx.log.
+needs on Windows) is not installed. Logs to ``<user dir>/lookfx.log``
+(``%LOCALAPPDATA%\\lookfx`` on Windows, ``~/.local/share/lookfx`` elsewhere;
+``LOOKFX_USER_DIR`` overrides). Started by run.bat (Windows) or run.sh
+(macOS / Linux, untested).
 """
 
 from __future__ import annotations
@@ -27,6 +30,10 @@ log = logging.getLogger("lookfx.launcher")
 WEBVIEW2_HINT = ("LookFX needs the Microsoft Edge WebView2 runtime for its window. Install it with:\n"
                  "    winget install Microsoft.EdgeWebView2Runtime\n"
                  "or from https://developer.microsoft.com/microsoft-edge/webview2/ — opening the UI in your browser instead.")
+# Any other reason the native window cannot open (pywebview missing, no GTK / Qt
+# backend on Linux, no pythonnet): the browser UI is the same app.
+NO_WINDOW_HINT = ("LookFX cannot open a native window ({why}); opening the UI in your browser instead.\n"
+                  "The browser tab is the full app (native file dialogs are replaced by path fields).")
 
 
 def setup_logging() -> Path | None:
@@ -289,7 +296,7 @@ def main(argv=None) -> int:
     if not ok:
         import webbrowser
         log.warning("no native window (%s); opening the default browser", why)
-        print(WEBVIEW2_HINT if why == "WebView2 runtime missing" else f"{why}; opening the UI in the browser",
+        print(WEBVIEW2_HINT if why == "WebView2 runtime missing" else NO_WINDOW_HINT.format(why=why),
               file=sys.stderr)
         webbrowser.open(url)
         try:

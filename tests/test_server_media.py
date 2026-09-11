@@ -262,3 +262,72 @@ def test_cpu_only_server(clip, tmp_path, monkeypatch):
         shutdown(app)
     finally:
         device.reset_cuda_check()
+
+
+# --- 0.1.1: input.fps for stills / sequences, hdr flags in media info ---------------
+
+def test_input_fps_redecodes_stills_only(client, clip, tmp_path):
+    src = tmp_path / "still.png"
+    write_image(src, torch.rand(1, 24, 32, 3)[0])
+    doc = {"schema_version": 1, "input": {"path": str(src), "range": [0, None]}, "output": {"path": ""}, "chain": []}
+    pid, info = open_clip(client, None, project=doc)
+    m = info["media"]
+    # the contract fields the UI reads: hdr / tonemapped flags and the fps override
+    assert m["fps"] == 24.0 and m["fps_override"] is None and m["hdr"] is False and m["tonemapped"] is False
+    sess = client.app_ref.state.sessions.get(pid)
+    first = sess.source
+    # a still: input.fps changes its rate and re-decodes (new FrameSource)
+    r = client.put(f"/api/project/{pid}", json=dict(doc, input={**doc["input"], "fps": 30})).json()
+    assert r["proxy_job"] and wait_job(client, r["proxy_job"])["state"] == "done"
+    m = client.get(f"/api/project/{pid}").json()["media"]
+    assert m["fps"] == 30.0 and m["fps_override"] == 30.0 and m["frames"] == 1
+    assert sess.source is not first
+    # a fraction string is accepted like in probe(); None goes back to 24
+    r = client.put(f"/api/project/{pid}", json=dict(doc, input={**doc["input"], "fps": "30000/1001"})).json()
+    wait_job(client, r["proxy_job"])
+    m = client.get(f"/api/project/{pid}").json()["media"]
+    assert abs(m["fps"] - 29.97) < 0.01 and abs(m["fps_override"] - 29.97) < 0.01
+    r = client.put(f"/api/project/{pid}", json=dict(doc, input={**doc["input"], "fps": None})).json()
+    wait_job(client, r["proxy_job"])
+    m = client.get(f"/api/project/{pid}").json()["media"]
+    assert m["fps"] == 24.0 and m["fps_override"] is None
+
+    # a video: its rate is intrinsic, so input.fps neither re-decodes nor changes it
+    vdoc = {"schema_version": 1, "input": {"path": str(clip / "clip.mkv"), "range": [0, None]},
+            "output": {"path": ""}, "chain": []}
+    pid, info = open_clip(client, None, project=vdoc)
+    assert info["media"]["kind"] == "video" and info["media"]["fps"] == 24.0 and info["media"]["fps_override"] is None
+    sess = client.app_ref.state.sessions.get(pid)
+    first, cache = sess.source, sess.source._cache.path
+    r = client.put(f"/api/project/{pid}", json=dict(vdoc, input={**vdoc["input"], "fps": 60})).json()
+    assert r["proxy_job"] and wait_job(client, r["proxy_job"])["state"] == "done"
+    m = client.get(f"/api/project/{pid}").json()["media"]
+    assert m["fps"] == 24.0 and m["fps_override"] is None and m["frames"] == N
+    assert sess.source is first and sess.source._cache.path == cache, "the video was re-decoded for an fps edit"
+    # ... but a range edit still does
+    r = client.put(f"/api/project/{pid}", json=dict(vdoc, input={"path": str(clip / "clip.mkv"), "range": [1, None], "fps": 60})).json()
+    assert r["proxy_job"] and wait_job(client, r["proxy_job"])["state"] == "done"
+    assert sess.source is not first and client.get(f"/api/project/{pid}").json()["media"]["frames"] == N - 1
+
+
+def test_saving_a_project_does_not_re_decode_the_aux(client, clip, tmp_path):
+    """Project.save adds path_rel to every media spec; that is bookkeeping, not a
+    changed source, so the depth cache must survive the next open_media."""
+    from fractions import Fraction
+    from lookfx_core.io.writer import open_sink
+    s = open_sink(tmp_path / "depth2.mkv", width=W, height=H, fps=Fraction(24), codec="ffv1")
+    s.write(torch.full((N, H, W, 3), 0.5))
+    s.close()
+    doc = {"schema_version": 1, "input": {"path": str(clip / "clip.mkv"), "range": [0, None]},
+           "aux": {"depth": {"path": str(tmp_path / "depth2.mkv")}}, "output": {"path": ""},
+           "chain": [{"effect": "flare", "params": {}}]}
+    pid, _info = open_clip(client, None, project=doc)
+    session = client.app_ref.state.sessions.get(pid)
+    depth_before = session.aux.get("depth")
+    assert depth_before is not None
+    assert client.post(f"/api/project/{pid}/save",
+                       json={"path": str(tmp_path / "p.lookfx.json")}).status_code == 200
+    assert "path_rel" in session.project.aux["depth"]        # save relativised the live doc
+    session._open_media(None)
+    assert session.aux.get("depth") is depth_before          # same FrameSource: no re-decode
+

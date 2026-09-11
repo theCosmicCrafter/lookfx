@@ -9,7 +9,7 @@ Viewer-first, layer-based UI (place the light, solve the clip, stack the print l
 
 ## Requirements
 
-- **Windows 10 / 11** (64-bit). The desktop shell (pywebview + WebView2) and the batch files are Windows-only; the CLI and the browser UI (`lookfx serve`) also run on Linux/macOS with a manual install.
+- **Windows 10 / 11** (64-bit) is the tested platform. macOS and Linux have `setup.sh` / `run.sh` mirroring the batch files (see *macOS / Linux (untested)* below); the CLI and the browser UI (`lookfx serve`) run there, the native window needs a pywebview backend (Cocoa on macOS, GTK or Qt on Linux).
 - **Python 3.12** with the `py` launcher (python.org installer; tick "py launcher").
 - **ffmpeg / ffprobe on PATH** (`winget install Gyan.FFmpeg`), or point `LOOKFX_FFMPEG` / `LOOKFX_FFPROBE` at the binaries. Stills work without ffmpeg; video does not.
 - **Microsoft Edge WebView2 runtime** for the desktop window (preinstalled on current Windows; otherwise `winget install Microsoft.EdgeWebView2Runtime`). Without it the window opens blank; the browser UI still works.
@@ -33,6 +33,18 @@ py -3.12 -m venv .venv
 
 `pip install -e .[app,dev]` alone also works (compatible-release bounds in `pyproject.toml`), but is not the tested set. `pytest -rs` lists the ffmpeg-gated tests that were skipped; set `LOOKFX_REQUIRE_FFMPEG=1` to make a missing ffmpeg a test failure.
 
+### macOS / Linux (untested)
+
+`setup.sh` does what `setup.bat` does: a Python 3.12 `.venv`, torch pinned to the version in `requirements-lock.txt` (Linux: from the CUDA 12.8 index, or the CPU wheel with `./setup.sh --cpu` / when no NVIDIA driver is found; macOS: the plain PyPI wheel, CPU or MPS), the rest of the locked set (minus the Windows-only `pythonnet` / `clr_loader`), then `pip install --no-deps -e .` and an ffmpeg check.
+
+```sh
+chmod +x setup.sh run.sh     # only if the clone lost the executable bits
+./setup.sh                   # or ./setup.sh --cpu
+./run.sh [clip-or-project]
+```
+
+Neither script has been run on a real macOS or Linux machine yet: the ffmpeg pipes, the engines and the server are platform-neutral Python, but expect rough edges (the native window needs pywebview's GTK/Qt backend on Linux and falls back to the browser without it; `xdg-open` / `open` reveal rendered files). User data lives in `~/.local/share/lookfx` (`LOOKFX_USER_DIR` overrides). Reports welcome.
+
 ## Run
 
 | | |
@@ -43,10 +55,11 @@ py -3.12 -m venv .venv
 | CLI still | `lookfx render in.png out.png --flare cine_blue --light 0.3,0.35 --print "Vintage Poster"` |
 | CLI video | `lookfx render in.mp4 out.mov --project shot.lookfx.json --codec prores --plates plates.mov` |
 | Probe | `lookfx probe in.mp4` · Presets: `lookfx presets flare` / `lookfx presets print_look` |
+| macOS / Linux (untested) | `./run.sh [clip-or-project]` — same launcher through `.venv/bin/python main.py`; browser mode is `.venv/bin/lookfx serve --open` |
 
 Codecs (`--codec`, also listed by `lookfx render --help`): `prores`, `prores_4444`, `h264`, `h264_nvenc`, `hevc_nvenc`, `ffv1` (lossless), `png_seq`, `png8_seq`, `tiff_seq`, `still`.
 
-Environment variables: `LOOKFX_FFMPEG` / `LOOKFX_FFPROBE` (binaries), `LOOKFX_DEVICE` (`cuda` / `cpu`, default: cuda when available), `LOOKFX_PORT` (fixed server port for the desktop app; default: a free port), `LOOKFX_USER_DIR` (presets, element textures and UI settings, default `%LOCALAPPDATA%\lookfx`), `LOOKFX_SCRATCH` (clip caches, default the system temp dir).
+Environment variables: `LOOKFX_FFMPEG` / `LOOKFX_FFPROBE` (binaries), `LOOKFX_DEVICE` (`cuda` / `cpu`, default: cuda when available), `LOOKFX_PORT` (fixed server port for the desktop app; default: a free port), `LOOKFX_USER_DIR` (presets, element textures and UI settings, default `%LOCALAPPDATA%\lookfx`, `~/.local/share/lookfx` elsewhere), `LOOKFX_SCRATCH` (clip caches, default the system temp dir).
 
 ### Server access (token)
 
@@ -72,17 +85,17 @@ curl -H "X-LookFX-Token: mysecret" http://127.0.0.1:8765/api/health
 - **Solve clip** — runs the whole-clip analysis for the selected flare layer (tracking, scene lock, depth occlusion, image visibility). The timeline lane shows the solved range and per-frame visibility; changing a source setting marks the solve stale.
 - **Parameters** — the real Flarecore editor and CMYK Magic panel, re-skinned.
 - **Timeline** — scrub, in/out (I / O), cached playback (Space), ←/→ (Shift = 10).
-- **Render…** — output, codec, range, chunk size, flare pass / ink plates as extra outputs; jobs run in the **Queue** with live progress and cancel. The output path follows the codec: picking a sequence codec turns `shot_fx.mov` into `shot_fx.png` / `.tif` (written numbered, `shot_fx_00001.png`), a video codec into its container (`.mov` / `.mp4` / `.mkv`).
+- **Render…** — output, codec, range, chunk size, flare pass / ink plates as extra outputs; jobs run in the **Queue** with live progress and cancel. The output path is pre-filled from the **output preferences** (Settings): next to the source clip, in a fixed folder, or next to the project file, named by a template — `{clip}_{look}_v{ver}` by default, with `{clip}` the source stem, `{look}` the first enabled flare preset, `{ver}` the next unused 3-digit version in that folder, plus `{date}` and `{project}` — and can still be edited. The path follows the codec: picking a sequence codec turns `shot_fx.mov` into `shot_fx.png` / `.tif` (written numbered, `shot_fx_00001.png`), a video codec into its container (`.mov` / `.mp4` / `.mkv`). A sequence render of a clip with audio also writes `shot_fx.wav` next to the frames. **Save as…** pre-fills its name the same way (project mode of the preferences, `{clip}_{look}_v{ver}.lookfx.json`).
 - **Project commands** (Edit toolbar) — **New** (Ctrl+N) closes the clip and starts empty, **Relink clip…** points the project at a moved or renamed clip and keeps the layers, solves and settings, **Save** (Ctrl+S) writes in place and **Save as…** (Ctrl+Shift+S) asks for a new name. Saves go through a temp file and keep one `.bak` next to the project; closing the window or opening another clip with unsaved changes asks first.
 - **Styles** — Dense, Roomy, Graphite, Midnight, Forest, Light, Paper × amber / cyan / green / magenta accents.
 
-Projects are JSON (`*.lookfx.json`). **Media paths inside a project are absolute**: the project records the full path of the clip (and depth map / plates) as it was when saved. When such a path no longer exists, opening the project looks for the file **next to the project file** (the same relative name under the project's folder) before giving up, so a folder that holds both the clip and its `.lookfx.json` can be moved or copied as a unit; for anything else use **Relink clip…**. Clip-wide solves are stored in the project (with a stamp of the media and the settings they were made for) and restored on open while they still match; otherwise the layer shows *not solved* and one click on **Solve clip** redoes it. User presets, element textures and the UI settings (`settings.json`: style, accent, recent files) live under `%LOCALAPPDATA%\lookfx\` (`LOOKFX_USER_DIR` overrides). Decoded clip caches go to `<temp>\lookfx_cache` (`LOOKFX_SCRATCH` overrides); stale caches are swept when the app starts.
+Projects are JSON (`*.lookfx.json`). **Media paths inside a project are stored twice**: the absolute path of the clip (and depth map / plates) as it was when saved (`path`), and the same path relative to the project file's folder (`path_rel`, when both are on the same drive). Opening a project uses the absolute path while it exists, else `path_rel` against the project's folder, else looks for the file by name **next to the project file** — so a folder that holds both the clip and its `.lookfx.json` can be moved or copied as a unit; for anything else use **Relink clip…**. Clip-wide solves are stored in the project (with a stamp of the media and the settings they were made for) and restored on open while they still match; otherwise the layer shows *not solved* and one click on **Solve clip** redoes it. User presets, element textures and the UI settings (`settings.json`: style, accent, recent files) live under `%LOCALAPPDATA%\lookfx\` (`LOOKFX_USER_DIR` overrides). Decoded clip caches go to `<temp>\lookfx_cache` (`LOOKFX_SCRATCH` overrides); stale caches are swept when the app starts.
 
 ### Colour, audio and formats
 
-- **SDR, BT.709.** Frames are processed as 16-bit sRGB and every output is tagged BT.709 (colour primaries, transfer and matrix), so players and NLEs read it as plain Rec.709 video. HDR sources (PQ / HLG transfer, BT.2020 primaries) are **not supported**: they decode as if they were SDR — flat, desaturated and wrongly tagged — and there is no HDR output.
-- **Audio** is copied, never processed. A full render copies the source track as-is when the container allows it. A **ranged render keeps the audio** for that range: it is trimmed to the rendered frames and re-encoded (AAC in `.mov` / `.mp4`, PCM elsewhere) when the range does not start at frame 0 or the source codec does not fit the output container; sequence and still outputs have no audio.
-- **EXR is input-only** (read and converted to sRGB; no EXR output). Stills: PNG / TIFF / JPEG. Image sequences and stills get 24 fps unless the project's `input.fps` sets another rate.
+- **SDR, BT.709.** Frames are processed as 16-bit sRGB and every output is tagged BT.709 (colour primaries, transfer and matrix), so players and NLEs read it as plain Rec.709 video. **HDR sources** (PQ / HLG transfer, BT.2020 primaries) are **tone-mapped to SDR on decode** (ffmpeg `zscale` + `tonemap` to BT.709): the source header shows an *HDR → SDR (tone-mapped)* badge, the media info reports `hdr` / `tonemapped`, and the render is SDR like every other; there is no HDR output.
+- **Audio** is copied, never processed. A full render copies the source track as-is when the container allows it. A **ranged render keeps the audio** for that range: it is trimmed to the rendered frames and re-encoded (AAC in `.mov` / `.mp4`, PCM elsewhere) when the range does not start at frame 0 or the source codec does not fit the output container. **Sequence outputs** of a full-range render get the audio as a **`.wav` sidecar** (`<sequence stem>.wav`, PCM 16-bit) next to the frames; stills have none.
+- **EXR is input-only** (read and converted to sRGB; no EXR output). Stills: PNG / TIFF / JPEG. Image sequences and stills get **24 fps unless you set a rate**: the fps field in the source header (stored as the project's `input.fps`) re-times the clip and re-decodes it; a video's rate is intrinsic and the field is hidden.
 
 ## Performance (RTX 5090, 1080p, 300 frames)
 
@@ -95,14 +108,14 @@ git pull
 setup.bat
 ```
 
-`setup.bat` is idempotent: it reuses the existing `.venv` and only installs what changed in `requirements-lock.txt`. Read `CHANGELOG.md` for anything that affects saved projects or presets. Your presets, element textures and settings under `%LOCALAPPDATA%\lookfx` are untouched by updates.
+`setup.bat` (`./setup.sh` on macOS / Linux) is idempotent: it reuses the existing `.venv` and only installs what changed in `requirements-lock.txt`. Read `CHANGELOG.md` for anything that affects saved projects or presets. Your presets, element textures and settings under `%LOCALAPPDATA%\lookfx` are untouched by updates.
 
 ## Uninstall
 
 LookFX installs nothing outside its folder except per-user data:
 
 1. Delete the repository folder (this removes `.venv` and the app).
-2. Delete `%LOCALAPPDATA%\lookfx` (user presets, element textures, `lookfx.log`).
+2. Delete `%LOCALAPPDATA%\lookfx` (`~/.local/share/lookfx` on macOS / Linux: user presets, element textures, `settings.json`, `lookfx.log`).
 3. Delete `%TEMP%\lookfx_cache` (or `<LOOKFX_SCRATCH>\lookfx_cache`) if a crash left decoded clip caches behind.
 
 Python, ffmpeg and the WebView2 runtime are shared system components and are left alone.
@@ -111,16 +124,16 @@ Python, ffmpeg and the WebView2 runtime are shared system components and are lef
 
 The Settings screen lists the same points.
 
-- **SDR only**: frames are processed as 16-bit sRGB; HDR (PQ / HLG, BT.2020) clips are treated as SDR and every output is tagged BT.709 (see *Colour, audio and formats*).
-- **EXR is input-only**; no EXR output. Stills: PNG / TIFF / JPEG; sequences and stills run at 24 fps unless `input.fps` is set (no per-frame timing).
-- **Audio is copied, not processed**; ranged renders trim (and may re-encode) it, sequence outputs have none.
-- **Absolute media paths** in project files, with the relative fallback and *Relink clip…* described above; one clip per project.
-- **A ranged render re-solves** the clip when the stored solve does not cover the rendered range.
-- Windows desktop shell only; the browser UI is the cross-platform path.
+- **SDR output only**: frames are processed as 16-bit sRGB and every output is tagged BT.709; HDR (PQ / HLG, BT.2020) sources are tone-mapped to SDR on decode (see *Colour, audio and formats*), there is no HDR output.
+- **EXR is input-only**; no EXR output. Stills: PNG / TIFF / JPEG; sequences and stills run at 24 fps unless a rate is set (`input.fps` / the source-header field) — one rate per clip, no per-frame timing.
+- **Audio is copied, not processed**; ranged renders trim (and may re-encode) it, sequence outputs get it as a `.wav` sidecar, stills have none.
+- **Project files store both absolute and relative media paths**; when neither resolves, the file is looked for by name next to the project, else *Relink clip…*; one clip per project.
+- **A ranged render reuses a covering solve** (the session's whole-clip solve sliced to the range) and re-solves only when no fresh solve covers it.
+- The desktop shell is tested on Windows only; `setup.sh` / `run.sh` exist for macOS / Linux but are untested there, and the browser UI is the fallback everywhere.
 
 ## Troubleshooting
 
-- **Log file**: `%LOCALAPPDATA%\lookfx\lookfx.log` (server, job and render errors). Attach it to bug reports.
+- **Log file**: `%LOCALAPPDATA%\lookfx\lookfx.log` (`~/.local/share/lookfx/lookfx.log` on macOS / Linux; server, job and render errors). Attach it to bug reports.
 - **The app does not start / the window closes at once**: run `run.bat --console` to keep the console open and read the error. Typical causes: `.venv` missing (run `setup.bat`), torch failed to import (re-run `setup.bat`), WebView2 runtime missing (see Requirements).
 - **Blank dark window**: the WebView2 runtime is missing or broken; install it, or use `lookfx serve --open` in a browser meanwhile.
 - **"ffmpeg not found"** or video will not open: install ffmpeg and make sure `ffmpeg` and `ffprobe` resolve on PATH in a fresh console, or set `LOOKFX_FFMPEG` / `LOOKFX_FFPROBE`.
