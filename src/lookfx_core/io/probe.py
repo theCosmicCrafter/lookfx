@@ -16,6 +16,15 @@ _TRAILING_DIGITS = re.compile(r"^(.*?)(\d+)(\.[A-Za-z0-9]+)$")
 
 DEFAULT_SEQUENCE_FPS = Fraction(24)
 
+# transfer tags that mark an HDR source (PQ / HLG); BT.2020 primaries alone
+# (wide-gamut SDR) also count: the decoder maps them to BT.709 either way
+HDR_TRANSFERS = ("smpte2084", "arib-std-b67")
+HDR_PRIMARIES = ("bt2020",)
+
+
+def is_hdr(transfer: str | None, primaries: str | None) -> bool:
+    return (transfer or "").lower() in HDR_TRANSFERS or (primaries or "").lower() in HDR_PRIMARIES
+
 
 @dataclass
 class MediaInfo:
@@ -36,6 +45,9 @@ class MediaInfo:
     color_transfer: str | None = None
     color_primaries: str | None = None
     audio_codec: str | None = None      # first audio stream's codec_name
+    hdr: bool = False                   # PQ/HLG transfer or BT.2020 primaries (see is_hdr)
+    tonemapped: bool = False            # set by FrameSource: its decode maps HDR -> SDR
+    fps_override: float | None = None   # the ``fps`` a still/sequence was probed with (None = default / video)
 
     def to_json(self) -> dict:
         d = asdict(self)
@@ -115,11 +127,13 @@ def probe(path: str | Path, fps=None) -> MediaInfo:
                                  "stream=width,height,pix_fmt,color_space,color_transfer,color_primaries"])
         st = j["streams"][0]
         rate = fps_over or DEFAULT_SEQUENCE_FPS
+        colour = dict(color_space=_tag(st, "color_space"), color_transfer=_tag(st, "color_transfer"),
+                      color_primaries=_tag(st, "color_primaries"))
         return MediaInfo(path=str(path), kind="sequence", width=int(st["width"]), height=int(st["height"]),
                          fps=rate, nb_frames=count, duration=float(count / rate), pix_fmt=st.get("pix_fmt", ""),
                          pattern=pattern, start_number=start, files=files or None,
-                         color_space=_tag(st, "color_space"), color_transfer=_tag(st, "color_transfer"),
-                         color_primaries=_tag(st, "color_primaries"))
+                         hdr=is_hdr(colour["color_transfer"], colour["color_primaries"]),
+                         fps_override=float(fps_over) if fps_over else None, **colour)
     if not path.is_file():
         raise FileNotFoundError(path)
     j = ffprobe_json(path, ["-show_entries",
@@ -134,10 +148,12 @@ def probe(path: str | Path, fps=None) -> MediaInfo:
     audio_codec = _tag(audio, "codec_name") if audio else None
     colour = dict(color_space=_tag(video, "color_space"), color_transfer=_tag(video, "color_transfer"),
                   color_primaries=_tag(video, "color_primaries"))
+    hdr = is_hdr(colour["color_transfer"], colour["color_primaries"])
     if path.suffix.lower() in STILL_SUFFIXES:
         return MediaInfo(path=str(path), kind="still", width=int(video["width"]), height=int(video["height"]),
                          fps=fps_over or DEFAULT_SEQUENCE_FPS, nb_frames=1, duration=None,
-                         pix_fmt=video.get("pix_fmt", ""), **colour)
+                         pix_fmt=video.get("pix_fmt", ""), hdr=hdr,
+                         fps_override=float(fps_over) if fps_over else None, **colour)
     rate = video.get("avg_frame_rate") or video.get("r_frame_rate") or "24/1"
     try:
         fps = Fraction(rate)
@@ -163,6 +179,7 @@ def probe(path: str | Path, fps=None) -> MediaInfo:
     width, height = int(video["width"]), int(video["height"])
     if rotation in (90, 270):
         width, height = height, width
+    # a video's rate is intrinsic: ``fps`` is ignored and fps_override stays None
     return MediaInfo(path=str(path), kind="video", width=width, height=height,
                      fps=fps, nb_frames=nb, duration=duration, pix_fmt=video.get("pix_fmt", ""),
-                     has_audio=has_audio, rotation=rotation, audio_codec=audio_codec, **colour)
+                     has_audio=has_audio, rotation=rotation, audio_codec=audio_codec, hdr=hdr, **colour)

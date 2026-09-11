@@ -159,6 +159,33 @@ def test_opus_source_to_mov(tmp_path):
     assert rep.audio and _audio(rep.output)[0] == "aac"
 
 
+def test_sequence_render_writes_audio_sidecar(tmp_path):
+    src = _av_clip(tmp_path / "av.mkv")
+    ctx = RunContext(device=torch.device("cpu"))
+    out = tmp_path / "seq" / "shot.png"
+    rep = run_project(_simple(src, out, [0, None], codec="png_seq"), ctx)   # the UI sends stop=null for a full in/out
+    wav = tmp_path / "seq" / "shot.wav"
+    assert rep.output.name == "shot_%05d.png" and (tmp_path / "seq" / "shot_00001.png").exists()
+    assert not rep.audio                                  # nothing muxed into the frames
+    assert rep.aux_outputs["audio"] == wav and wav.exists()
+    codec, dur = _audio(wav)
+    assert codec == "pcm_s16le" and abs(dur - 24 / 24) < 0.1
+    assert not [p for p in (tmp_path / "seq").iterdir() if "partial" in p.name]
+    # tiff sequences and an explicit pattern name the sidecar after the sequence stem
+    rep = run_project(_simple(src, tmp_path / "t" / "plate_%04d.tif", [0, None], codec="tiff_seq"), ctx)
+    assert rep.aux_outputs["audio"] == tmp_path / "t" / "plate.wav" and rep.aux_outputs["audio"].exists()
+    # a ranged render or audio "none" gets no sidecar
+    rep = run_project(_simple(src, tmp_path / "part.png", [2, 6], codec="png_seq"), ctx)
+    assert "audio" not in rep.aux_outputs and not (tmp_path / "part.wav").exists()
+    rep = run_project(_simple(src, tmp_path / "mute.png", [0, None], codec="png_seq", audio="none"), ctx)
+    assert "audio" not in rep.aux_outputs and not (tmp_path / "mute.wav").exists()
+    # a silent source: no sidecar either
+    subprocess.run([find_ffmpeg(), "-v", "error", "-y", "-f", "lavfi", "-i", f"testsrc=size={W}x{H}:rate=24",
+                    "-frames:v", "4", "-c:v", "ffv1", "-pix_fmt", "rgb48le", str(tmp_path / "silent.mkv")], check=True)
+    rep = run_project(_simple(tmp_path / "silent.mkv", tmp_path / "silent.png", [0, None], codec="png_seq"), ctx)
+    assert "audio" not in rep.aux_outputs
+
+
 def test_aux_sources_follow_the_range(clips, tmp_path):
     ctx = RunContext(device=torch.device("cpu"))
 
@@ -187,6 +214,24 @@ def test_refuses_output_equal_to_input(clips, tmp_path):
     proj.output["aux"] = {"plates": str(clips / "depth.mkv")}
     with pytest.raises(ValueError):
         run_project(proj, RunContext(device=torch.device("cpu")))
+
+
+def test_audio_sidecar_refuses_the_source(tmp_path):
+    from lookfx_core.io.writer import write_audio_sidecar, audio_sidecar_path, output_path
+    from lookfx.pipeline import _check_outputs
+    src = _av_clip(tmp_path / "av.mkv")
+    before = src.read_bytes()
+    with pytest.raises(ValueError):
+        write_audio_sidecar(src, src)
+    with pytest.raises(ValueError):
+        write_audio_sidecar(tmp_path / "other.mkv", tmp_path / "x.wav", source=tmp_path / "x.wav")
+    assert src.read_bytes() == before and not list(tmp_path.glob("*partial*"))
+    # the pipeline's pre-flight check covers the sidecar path like any output
+    wav = audio_sidecar_path(output_path(tmp_path / "av.png", "png_seq"))
+    assert wav == tmp_path / "av.wav"
+    proj = _simple(wav, tmp_path / "av.png", [0, None], codec="png_seq")
+    with pytest.raises(ValueError):
+        _check_outputs(proj, {"audio": wav})
 
 
 def test_cpu_chunk_budget(monkeypatch):

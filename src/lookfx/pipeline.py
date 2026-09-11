@@ -12,7 +12,8 @@ import torch
 from lookfx_core.chunking import frames_per_chunk
 from lookfx_core.effect import Effect
 from lookfx_core.io.reader import open_source, FrameSource
-from lookfx_core.io.writer import open_sink, FrameSink
+from lookfx_core.io.writer import (open_sink, FrameSink, output_path, audio_sidecar_path,
+                                   write_audio_sidecar, is_sequence_codec)
 from lookfx_core.io.image import is_still
 from lookfx_core.progress import RunContext
 from lookfx_core.project import Project
@@ -27,7 +28,7 @@ class RunReport:
     output: Path
     frames: int
     seconds: float
-    aux_outputs: dict[str, Path] = field(default_factory=dict)
+    aux_outputs: dict[str, Path] = field(default_factory=dict)   # + "audio": a sequence's .wav sidecar
     states: list = field(default_factory=list)
     audio: bool = False                 # an audio track was muxed into ``output``
 
@@ -103,6 +104,7 @@ def run_project(project: Project, ctx: RunContext | None = None, states: list | 
     out_path = Path(project.output["path"])
     aux_paths = {k: Path(v) for k, v in (project.output.get("aux") or {}).items() if v and k in chain.aux_outputs}
     _check_outputs(project, {"image": out_path, **aux_paths})
+    # input.fps only applies to stills / sequences (None = probed or the 24 default)
     src = open_source(project.input["path"], start=start, stop=stop, scratch_dir=ctx.scratch_dir,
                       fps=project.input.get("fps"))
     total_src = src.info.nb_frames
@@ -124,6 +126,12 @@ def run_project(project: Project, ctx: RunContext | None = None, states: list | 
             audio_start = start / fps
         if stop is not None:
             audio_duration = max(0, stop - start) / fps
+    # a sequence cannot carry audio: a full-range render gets the track as a
+    # <seq stem>.wav sidecar next to the frames (checked against the inputs now)
+    sidecar: Path | None = None
+    if audio_from and is_sequence_codec(codec) and start == 0 and stop is None:
+        sidecar = audio_sidecar_path(output_path(out_path, codec))
+        _check_outputs(project, {"audio": sidecar})
     sinks: dict[str, FrameSink] = {}
     try:
         # --- analysis: whole-clip context, small CPU results ---------------
@@ -168,6 +176,8 @@ def run_project(project: Project, ctx: RunContext | None = None, states: list | 
                 ctx.tick("render", done, total or done, f"{chunk} frames/chunk")
         result = sinks["image"].close()
         aux_out = {name: s.close() for name, s in sinks.items() if name != "image"}
+        if sidecar is not None:
+            aux_out["audio"] = write_audio_sidecar(audio_from, sidecar, source=src.info.path)
         return RunReport(output=result, frames=done, seconds=time.time() - t0,
                          aux_outputs=aux_out, states=states, audio=sinks["image"].has_audio)
     except BaseException:

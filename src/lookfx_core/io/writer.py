@@ -9,6 +9,9 @@ Colour: the pipe carries display-referred sRGB. YUV outputs are converted
 with the BT.709 matrix (video range) and tagged BT.709 so NLEs and players
 show the same hues the app does; RGB outputs (ffv1, png, tiff) carry only
 the primaries/transfer tags. HDR (PQ/HLG, BT.2020) output is not supported.
+
+Image sequences cannot carry audio: ``write_audio_sidecar`` puts the
+source's track next to them as ``<seq stem>.wav`` (16-bit PCM).
 """
 
 from __future__ import annotations
@@ -112,24 +115,67 @@ def _same_file(a: Path, b: str | Path | None) -> bool:
         return False
 
 
+def output_path(path: str | Path, codec: str) -> Path:
+    """The path a sink actually writes for ``codec``: sequence codecs always
+    get their image extension and a frame-number pattern (``out.mov`` ->
+    ``out_%05d.png``), other codecs their forced container suffix."""
+    path = Path(path)
+    if codec not in CODECS:
+        raise ValueError(f"unknown codec {codec!r}; one of {sorted(CODECS)}")
+    forced = CODECS[codec][1]
+    if codec in _SEQ_CODECS:
+        if path.suffix.lower() not in _SEQ_SUFFIXES[codec]:
+            path = path.with_suffix(forced)
+        if "%" not in path.name:
+            path = path.with_name(f"{path.stem}_%05d{path.suffix}")
+    elif forced and path.suffix.lower() != forced:
+        path = path.with_suffix(forced)
+    return path
+
+
+def is_sequence_codec(codec: str) -> bool:
+    return codec in _SEQ_CODECS
+
+
+def sequence_stem(pattern: str | Path) -> str:
+    """``out_%05d.png`` -> ``out``: the name shared by a sequence's files."""
+    return Path(pattern).name.split("%")[0].rstrip("_") or "seq"
+
+
+def audio_sidecar_path(pattern: str | Path) -> Path:
+    """Where a sequence's audio goes: ``<seq stem>.wav`` next to the frames."""
+    p = Path(pattern)
+    return p.parent / f"{sequence_stem(p)}.wav"
+
+
+def write_audio_sidecar(audio_from: str | Path, path: str | Path, *, source: str | Path | None = None) -> Path:
+    """Extract the first audio stream of ``audio_from`` to ``path`` as 16-bit
+    PCM WAV (the companion of an image-sequence render, which cannot carry
+    audio itself). Written next to the target and moved into place, like a
+    sink; refuses to overwrite ``source`` or ``audio_from``."""
+    path = Path(path)
+    for p in (source, audio_from):
+        if _same_file(path, p):
+            raise ValueError(f"output {path} is the same file as the input {p}")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(f"{path.stem}.partial-{os.getpid()}-{uuid.uuid4().hex[:8]}{path.suffix}")
+    try:
+        Proc(["-y", "-i", str(audio_from), "-vn", "-sn", "-dn", "-map", "0:a:0", "-c:a", "pcm_s16le", str(tmp)]).wait()
+        os.replace(tmp, path)
+    except BaseException:
+        tmp.unlink(missing_ok=True)
+        raise
+    return path
+
+
 class FrameSink:
     def __init__(self, path: str | Path, width: int, height: int, fps, *, codec: str = "prores",
                  audio_from: str | Path | None = None, audio_codec: str | None = None,
                  audio_start: float = 0.0, audio_duration: float | None = None,
                  source: str | Path | None = None, extra: list[str] = ()):
-        self.path = Path(path)
+        self.path = output_path(path, codec)     # validates the codec, forces the suffix / pattern
         self.width, self.height = int(width), int(height)
-        if codec not in CODECS:
-            raise ValueError(f"unknown codec {codec!r}; one of {sorted(CODECS)}")
-        out_args, forced = CODECS[codec]
-        if codec in _SEQ_CODECS:
-            # `out.mov` -> `out_%05d.png`: sequence codecs always get their image extension
-            if self.path.suffix.lower() not in _SEQ_SUFFIXES[codec]:
-                self.path = self.path.with_suffix(forced)
-            if "%" not in self.path.name:
-                self.path = self.path.with_name(f"{self.path.stem}_%05d{self.path.suffix}")
-        elif forced and self.path.suffix.lower() != forced:
-            self.path = self.path.with_suffix(forced)
+        out_args = CODECS[codec][0]
         if codec == "still":
             out_args = out_args + _still_args(self.path.suffix)
         for p in (source, audio_from):
@@ -140,7 +186,7 @@ class FrameSink:
         token = f"partial-{os.getpid()}-{uuid.uuid4().hex[:8]}"
         self.is_sequence = "%" in self.path.name
         if self.is_sequence:
-            self._tmp_dir: Path | None = self.path.parent / f"{self.path.name.split('%')[0].rstrip('_') or 'seq'}.{token}"
+            self._tmp_dir: Path | None = self.path.parent / f"{sequence_stem(self.path)}.{token}"
             self._tmp_dir.mkdir()
             self._tmp = self._tmp_dir / self.path.name
         else:

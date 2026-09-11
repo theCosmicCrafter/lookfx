@@ -246,7 +246,7 @@ def test_seq_codec_forces_image_suffix(tmp_path, frames):
     assert s.path.name == "t_%05d.tif" and (tmp_path / "t_00001.tif").exists()
 
 
-def test_sequence_fps_override(tmp_path, frames):
+def test_sequence_fps_override(tmp_path, frames, clip):
     with open_sink(tmp_path / "seq" / "f.png", width=W, height=H, fps=Fraction(24), codec="png_seq") as s:
         s.write(frames[:3])
     assert probe(tmp_path / "seq").fps == Fraction(24)
@@ -255,6 +255,11 @@ def test_sequence_fps_override(tmp_path, frames):
     assert open_source(tmp_path / "seq", fps=25).info.fps == Fraction(25)
     with pytest.raises(ValueError):
         probe(tmp_path / "seq", fps=-1)
+    # the override travels in the JSON so the UI can show / edit it; a video's is always None
+    assert probe(tmp_path / "seq").to_json()["fps_override"] is None
+    assert probe(tmp_path / "seq", fps=30).to_json()["fps_override"] == 30.0
+    assert probe(tmp_path / "seq" / "f_00001.png", fps=30).fps_override == 30.0
+    assert probe(clip, fps=30).fps_override is None and probe(clip, fps=30).fps == Fraction(24)
 
 
 def test_exr_reads_as_srgb(tmp_path):
