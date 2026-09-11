@@ -3,6 +3,7 @@
 import shutil
 import subprocess
 from fractions import Fraction
+from pathlib import Path
 
 import pytest
 import torch
@@ -10,7 +11,8 @@ import torch
 from lookfx_core.io.ffmpeg import find_ffmpeg, find_ffprobe
 from lookfx_core.io.probe import probe
 from lookfx_core.io.reader import open_source
-from lookfx_core.io.writer import open_sink, audio_args, CODECS, _SEQ_CODECS
+from lookfx_core.io.writer import (open_sink, audio_args, output_path, audio_sidecar_path, is_sequence_codec,
+                                   CODECS, _SEQ_CODECS)
 
 pytestmark = pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="ffmpeg not on PATH")
 
@@ -85,6 +87,20 @@ def test_audio_args_table():
     assert audio_args(".mp4", "pcm_s16le")[:2] == ["-c:a", "aac"]
     assert audio_args(".mov", "aac", transcode=True)[:2] == ["-c:a", "aac"]
     assert audio_args(".avi", "opus") == ["-c:a", "pcm_s16le"]
+
+
+def test_output_path_and_sidecar_table():
+    assert output_path("a/out.mov", "png_seq") == Path("a/out_%05d.png")
+    assert output_path("a/out_%04d.png", "png_seq") == Path("a/out_%04d.png")
+    assert output_path("a/out.tiff", "tiff_seq") == Path("a/out_%05d.tiff")
+    assert output_path("a/out.mkv", "prores") == Path("a/out.mov")
+    assert output_path("a/out.png", "still") == Path("a/out.png")
+    with pytest.raises(ValueError):
+        output_path("a/out.mov", "nope")
+    assert audio_sidecar_path("a/out_%05d.png") == Path("a/out.wav")
+    assert audio_sidecar_path("a/plate_%04d.tif") == Path("a/plate.wav")
+    assert audio_sidecar_path("a/%05d.png") == Path("a/seq.wav")
+    assert [c for c in CODECS if is_sequence_codec(c)] == list(_SEQ_CODECS)
 
 
 def test_opus_source_to_mov(tmp_path):
