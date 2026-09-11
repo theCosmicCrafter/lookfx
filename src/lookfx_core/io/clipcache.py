@@ -27,7 +27,10 @@ class ClipCache:
         self._mm = np.memmap(path, dtype=np.uint16, mode="r+", shape=(count, height, width, 3))
 
     @classmethod
-    def build(cls, source, scratch_dir: str | None = None) -> "ClipCache":
+    def build(cls, source, scratch_dir: str | None = None, ctx=None) -> "ClipCache":
+        """Decode ``source`` into a new cache file. ``ctx.check_cancel()`` is
+        polled after every frame; on any exception (decode error, cancel) the
+        partial file is deleted before re-raising."""
         d = Path(scratch_dir or os.environ.get("LOOKFX_SCRATCH") or tempfile.gettempdir()) / "lookfx_cache"
         d.mkdir(parents=True, exist_ok=True)
         path = d / f"clip_{uuid.uuid4().hex}.u16"
@@ -37,21 +40,33 @@ class ClipCache:
         cap = expected or 64
         mm = np.memmap(path, dtype=np.uint16, mode="w+", shape=(cap, h, w, 3))
         n = 0
-        for arr in source.stream():
-            if n >= cap:
+        frames = source.stream()
+        try:
+            for arr in frames:
+                if n >= cap:
+                    del mm
+                    cap = max(cap * 2, n + 1)
+                    mm = np.memmap(path, dtype=np.uint16, mode="r+", shape=(cap, h, w, 3))
+                mm[n] = arr
+                n += 1
+                if ctx is not None:
+                    ctx.check_cancel()
+            mm.flush()
+            del mm
+            if n == 0:
+                raise RuntimeError(f"no frames decoded from {source.info.path}")
+            if n != cap:
+                # truncate the file to the frames actually written
+                with open(path, "r+b") as f:
+                    f.truncate(n * h * w * 3 * 2)
+        except BaseException:
+            frames.close()          # stops ffmpeg
+            try:
                 del mm
-                cap = max(cap * 2, n + 1)
-                mm = np.memmap(path, dtype=np.uint16, mode="r+", shape=(cap, h, w, 3))
-            mm[n] = arr
-            n += 1
-        mm.flush()
-        del mm
-        if n == 0:
-            raise RuntimeError(f"no frames decoded from {source.info.path}")
-        if n != cap:
-            # truncate the file to the frames actually written
-            with open(path, "r+b") as f:
-                f.truncate(n * h * w * 3 * 2)
+            except NameError:
+                pass
+            path.unlink(missing_ok=True)
+            raise
         return cls(path, h, w, n)
 
     def read(self, start: int, stop: int) -> torch.Tensor:

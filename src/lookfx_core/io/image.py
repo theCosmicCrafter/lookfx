@@ -11,7 +11,9 @@ from PIL import Image
 
 from ..tensors import from_uint8, from_uint16, to_uint8
 
-STILL_SUFFIXES = {".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp", ".webp"}
+STILL_SUFFIXES = {".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp", ".webp", ".exr"}
+# Linear-float formats: readable (decoded to sRGB through ffmpeg), not writable.
+LINEAR_SUFFIXES = {".exr"}
 
 
 def is_still(path: str | Path) -> bool:
@@ -19,7 +21,14 @@ def is_still(path: str | Path) -> bool:
 
 
 def read_image(path: str | Path) -> torch.Tensor:
-    """Read a still as [1,H,W,3|4] float32 0..1 (16-bit PNG/TIFF preserved)."""
+    """Read a still as [1,H,W,3|4] float32 0..1 (16-bit PNG/TIFF preserved).
+
+    EXR (linear float) goes through the ffmpeg reader, which applies the
+    sRGB transfer, so every still arrives display-referred."""
+    if Path(path).suffix.lower() in LINEAR_SUFFIXES:
+        from .reader import open_source
+        with open_source(path) as src:
+            return src.read(0, 1)
     img = Image.open(path)
     img.load()
     if img.mode in ("I;16", "I;16B", "I;16L", "I"):
@@ -35,6 +44,8 @@ def read_image(path: str | Path) -> torch.Tensor:
 def write_image(path: str | Path, frame: torch.Tensor, bit_depth: int = 8) -> Path:
     """Write one frame [H,W,3|4] (or [1,H,W,C]) to ``path`` by suffix."""
     path = Path(path)
+    if path.suffix.lower() in LINEAR_SUFFIXES:
+        raise ValueError(f"{path.suffix} output is not supported (linear-float formats are read-only)")
     if frame.dim() == 4:
         frame = frame[0]
     if bit_depth != 8:
