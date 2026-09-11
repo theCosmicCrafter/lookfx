@@ -38,7 +38,10 @@ export class Store {
 
   step(i = this.selected) { return this.doc.chain[i]; }
 
-  // Called by the fake node widgets on every value write.
+  // Called by the fake node widgets around every value write: willTouch()
+  // before the write captures the pre-edit document (once per quiet
+  // window, so a drag undoes to where it started), touch() after announces it.
+  willTouch() { this._snapshotSoon(); }
   touch(i, name) {
     this._snapshotSoon();
     this._emit("params", { step: i, name });
@@ -89,8 +92,12 @@ export class Store {
   // -- undo / redo ----------------------------------------------------------------
   _snapshotNow() {
     clearTimeout(this._quietTimer);
+    // A slider drag still coalescing when a structural edit lands: land its
+    // pre-drag state first, or the drag merges into the previous entry.
+    const cur = JSON.stringify(this.doc);
+    if (this._pendingSnapshot !== null && this._pendingSnapshot !== cur) this._push(this._pendingSnapshot);
     this._pendingSnapshot = null;
-    this._push(JSON.stringify(this.doc));
+    this._push(cur);
   }
   _snapshotSoon() {
     if (this._pendingSnapshot === null) this._pendingSnapshot = JSON.stringify(this.doc);
@@ -117,7 +124,8 @@ export class Store {
     this._redo.push(JSON.stringify(this.doc));
     this.doc = JSON.parse(prev);
     this.selected = Math.min(this.selected, this.doc.chain.length - 1);
-    this._emit("load");
+    this._emit("load", { history: true });     // an undone document is an unsaved one
+    this._emit("history");
   }
   redo() {
     const next = this._redo.pop();
@@ -125,7 +133,8 @@ export class Store {
     this._undo.push(JSON.stringify(this.doc));
     this.doc = JSON.parse(next);
     this.selected = Math.min(this.selected, this.doc.chain.length - 1);
-    this._emit("load");
+    this._emit("load", { history: true });
+    this._emit("history");
   }
   get canUndo() { return this._undo.length > 0 || this._pendingSnapshot !== null; }
   get canRedo() { return this._redo.length > 0; }

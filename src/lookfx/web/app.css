@@ -1,5 +1,13 @@
 /* LookFX shell — tokens and layout, after the Claude Design handoff (three styles). */
 
+/* IBM Plex, shipped locally (SIL OFL 1.1, see fonts/OFL.txt): the desktop
+   app must not fetch fonts from Google on every launch, nor change metrics
+   when offline. Sans is the variable file (wght 100-700), Mono three statics. */
+@font-face { font-family:'IBM Plex Sans'; font-style:normal; font-weight:100 700; font-display:swap; src:url(fonts/IBMPlexSans-Variable.woff2) format('woff2'); }
+@font-face { font-family:'IBM Plex Mono'; font-style:normal; font-weight:400; font-display:swap; src:url(fonts/IBMPlexMono-Regular.woff2) format('woff2'); }
+@font-face { font-family:'IBM Plex Mono'; font-style:normal; font-weight:500; font-display:swap; src:url(fonts/IBMPlexMono-Medium.woff2) format('woff2'); }
+@font-face { font-family:'IBM Plex Mono'; font-style:normal; font-weight:600; font-display:swap; src:url(fonts/IBMPlexMono-SemiBold.woff2) format('woff2'); }
+
 :root, body[data-theme="dense"] {
   --bg0:#0c0d0f; --bg1:#121316; --bg2:#17191d; --bg3:#1e2126; --line:#282b31;
   --text:#e8e9ec; --dim:#8a8f98; --fs:11.5px; --rad:4px; --stripe:rgba(255,255,255,.045);
@@ -101,6 +109,8 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:12px; h
 .card.welcome { width:100%; max-width:560px; padding:30px 32px 26px; }
 .card.welcome .brand { margin-bottom:20px; }
 .actions { display:flex; gap:9px; margin-top:6px; } .actions button { padding:9px 15px; font-size:12px; }
+.banner { margin:14px 0 0; padding:9px 12px; border:1px solid var(--bad); border-left-width:3px; border-radius:var(--rad); background:color-mix(in oklab, var(--bad) 10%, var(--bg2)); font-size:11.5px; line-height:1.5; }
+.banner code { font-family:'IBM Plex Mono', monospace; font-size:10.5px; background:var(--bg0); padding:1px 5px; border-radius:3px; }
 .recent { margin-top:22px; border-top:1px solid var(--bg2); }
 .recent .item { display:flex; gap:12px; align-items:baseline; padding:10px 0; border-bottom:1px solid var(--bg2); cursor:pointer; }
 .recent .item:hover .name { color:var(--acct); } .recent .item .name { font-weight:600; }
@@ -149,6 +159,23 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:12px; h
 #params-body { flex:1; min-height:0; overflow:hidden; display:flex; flex-direction:column; padding:0 8px 8px; }
 #params-body > .lx-mounted { flex:1; min-height:0; }
 #params-body > .lx-mounted[hidden] { display:none !important; }
+#params-body { container-type:inline-size; }
+/* the vendored editor root is one flex child of the panel host; the generated
+   sections (advanced, seed) sit below it */
+#params .panel-host > .fcore, #params .panel-host > .cmyk-root { height:auto !important; flex:1; min-height:0; }
+.lx-extra { flex:none; margin-top:6px; background:var(--bg2); border:1px solid var(--line); border-radius:var(--rad); padding:6px 9px; }
+.lx-advanced > summary { cursor:pointer; color:var(--dim); font-size:10.5px; letter-spacing:.06em; text-transform:uppercase; user-select:none; }
+.lx-advanced > summary:hover { color:var(--acct); }
+.lx-advanced-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(min(240px, 100%), 1fr)); gap:5px 14px; padding-top:8px; max-height:40vh; overflow-y:auto; }
+.lx-param { display:flex; align-items:center; gap:7px; min-width:0; font-size:11px; }
+.lx-param .lx-param-name { flex:0 0 96px; color:var(--dim); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:10.5px; }
+.lx-param input[type=range] { flex:1; min-width:40px; height:12px; }
+.lx-param input[type=number] { width:72px; padding:3px 5px; }
+.lx-param input[type=text] { flex:1; min-width:0; }
+.lx-param select { flex:1; min-width:0; padding:3px 5px; }
+.lx-param input[type=checkbox] { accent-color:var(--acc); margin:0; }
+.lx-seed-row .lx-param-name { flex-basis:40px; }
+.lx-new-seed { flex:none; }
 
 /* re-skin the vendored panels with the app tokens */
 #params .fcore { background:var(--bg1) !important; border-color:var(--line) !important; color:var(--text) !important; font-family:'IBM Plex Sans', sans-serif !important; }
@@ -161,7 +188,28 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:12px; h
 #params .fcore-name { color:var(--text) !important; }
 #params .fcore-col input[type=range] { accent-color:var(--acc); }
 #params .fcore-groups .active { border-color:var(--acc) !important; color:var(--acct) !important; background:var(--bg3) !important; }
+#params .fcore-global { background:var(--bg2) !important; border-color:var(--line) !important; }
+#params .fcore-global label, #params .fcore-group-title, #params .fcore-hint, #params .fcore-source-tuning > summary, #params .fcore-settings > summary, #params .fcore-menu-head { color:var(--dim) !important; }
+#params .fcore-global input[type=number], #params .fcore-src-sel, #params .fcore-adv select, #params .fcore-forge textarea { background:var(--bg0) !important; color:var(--text) !important; border-color:var(--line) !important; }
+#params .fcore-groups, #params .fcore-source-tuning, #params .fcore-settings { border-color:var(--line) !important; }
+#params .fcore-global input[type=range] { accent-color:var(--acc); }
+#params .fcore-list > div[style] { color:var(--dim) !important; }   /* "no elements" placeholder */
 #params .lx-mounted.cmyk-root { background:var(--bg1) !important; border-color:var(--line) !important; }
+/* The print panel styles its elements inline from the LiteGraph shim's dark
+   palette (fixed at load), so in the light themes it keeps a dark ground of
+   its own instead of #ddd text on paper. */
+body[data-theme="light"] #params .lx-mounted.cmyk-root, body[data-theme="paper"] #params .lx-mounted.cmyk-root { background:#303030 !important; border-color:#4e4e4e !important; }
+/* Stack the print panel in the dock: preview + help beside each other on
+   top, controls below, and the two slider columns wrap under ~700 px so the
+   ranges keep a usable width at any dock size. */
+#params .cmyk-root { flex-direction:column !important; }
+#params .cmyk-left { width:100% !important; flex:none !important; flex-direction:row !important; flex-wrap:wrap; align-items:stretch; }
+#params .cmyk-left > :first-child { width:100%; }
+#params .cmyk-preview { width:204px; flex:none; }
+#params .cmyk-help { flex:1 1 140px; min-width:0; }
+#params .cmyk-right { flex:1 1 auto !important; min-height:0; }
+#params .cmyk-lower { flex-wrap:wrap; }
+@container (max-width: 700px) { #params .cmyk-lower > div { flex:1 1 100% !important; } }
 
 /* timeline */
 #timeline { height:118px; flex:none; border-top:1px solid var(--line); background:var(--bg1); display:flex; align-items:stretch; gap:10px; padding:8px 12px; }

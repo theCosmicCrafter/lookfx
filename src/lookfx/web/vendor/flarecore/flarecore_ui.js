@@ -10,6 +10,7 @@ import { app } from "../../scripts/app.js";
 import { api } from "../../scripts/api.js";
 import { createMotionPanel } from "./flarecore_motion.js";
 import { openPresetGallery } from "./flarecore_presets.js";
+import { dialog as lxDialog } from "../../dialog.js"; // lookfx: in-app prompt/confirm; window.prompt is unavailable in the webview shell
 import { SOURCE_FIELDS, clone, sceneDocument, activeGroup, sourceValue, setGroupSource, ensureGroups, newGroupId, selectGroupResult } from "./flarecore_groups.js";
 
 /* ------------------------------------------------------------------ utils */
@@ -331,12 +332,17 @@ class PointPicker {
     const ctx = this.canvas.getContext("2d");
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, W, H);
+    const hosted = !!this.node._lxHosted; // lookfx: the shell shows the frame under a transparent picker
+    if (!hosted) { // lookfx:
     ctx.fillStyle = "#0d0d11";
     ctx.fillRect(0, 0, W, H);
+    } // lookfx:
 
     const r = this.imageRect();
+    if (!hosted) { // lookfx:
     ctx.fillStyle = "#101014";
     ctx.fillRect(0, 0, W, H);
+    } // lookfx:
     if (this.backdrop) {
       ctx.drawImage(this.backdrop, r.x, r.y, r.w, r.h);
       ctx.strokeStyle = "rgba(255,255,255,0.28)";
@@ -1763,7 +1769,7 @@ class FlareEditor {
     saveBtn.title = "Save this flare group's preset. Save the workflow to retain all groups and source settings.";
     saveBtn.onclick = async () => {
       this.flushPending();
-      const name = prompt("Preset name:", this.read()?.name || "my_flare");
+      const name = await lxDialog.prompt("Preset name:", this.read()?.name || "my_flare"); // lookfx: was window.prompt
       if (!name) return;
       const post = (overwrite) => api.fetchApi("/flarecore/save_preset", {
         method: "POST", headers: { "Content-Type": "application/json" },
@@ -1773,7 +1779,7 @@ class FlareEditor {
         let d = await (await post(false)).json();
         if (d.exists || d.shipped) {
           const kind = d.shipped ? "a SHIPPED preset" : "an existing preset";
-          if (confirm(`'${name}' is ${kind}. Overwrite it?`)) {
+          if (await lxDialog.confirm(`'${name}' is ${kind}. Overwrite it?`)) { // lookfx: was window.confirm
             d = await (await post(true)).json();
           }
         }
@@ -1962,7 +1968,7 @@ class FlareEditor {
       d.groups.push(copy);d.active_group=copy.id;
     });
     const rename=document.createElement('button');rename.className='fcore-btn';rename.textContent='Rename';
-    rename.onclick=()=>{const name=prompt('Flare group name:',selected?.name || 'Flare 1');if(name?.trim())this.changeGroups(d=>{activeGroup(d).name=name.trim();});};
+    rename.onclick=async()=>{const name=await lxDialog.prompt('Flare group name:',selected?.name || 'Flare 1');if(name?.trim())this.changeGroups(d=>{activeGroup(d).name=name.trim();});}; // lookfx: was window.prompt
     const enabled=document.createElement('label'),check=document.createElement('input');check.type='checkbox';check.checked=selected?.enabled!==false;
     check.onchange=()=>this.changeGroups(d=>{activeGroup(d).enabled=check.checked;});enabled.append(check,' Enabled');
     const remove=document.createElement('button');remove.className='fcore-btn';remove.textContent='Remove flare';remove.disabled=groups.length<=1;
@@ -2294,8 +2300,8 @@ class FlareEditor {
     name.onclick = pick;
     chip.style.cursor = "pointer";
     chip.onclick = pick;
-    const rename = () => {
-      const v = prompt("Rename element:", elem.label || elem.type);
+    const rename = async () => { // lookfx: awaits the in-app prompt
+      const v = await lxDialog.prompt("Rename element:", elem.label || elem.type); // lookfx: was window.prompt
       if (v != null && v.trim()) this.mutate((p) => { p.elements[i].label = v.trim(); });
     };
     name.ondblclick = (e) => { e.stopPropagation(); rename(); };
