@@ -4,9 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>LookFX</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<!-- Everything is served by the local server: no remote scripts, styles, fonts or connections.
+     Inline styles stay allowed for the vendored panels, which style elements directly. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; connect-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
 <link rel="stylesheet" href="app.css">
 </head>
 <body data-theme="dense">
@@ -55,6 +55,7 @@
           <button class="primary" id="btn-open-media">Open clip or image…</button>
           <button id="btn-open-project">Open project…</button>
         </div>
+        <div id="ffmpeg-banner" class="banner" hidden><b>ffmpeg / ffprobe not found.</b> LookFX decodes and encodes every clip with ffmpeg. Install it and restart: <code>winget install Gyan.FFmpeg</code> (or set <code>LOOKFX_FFMPEG</code> / <code>LOOKFX_FFPROBE</code> to the executables).</div>
         <div id="recent" class="recent"></div>
       </div>
     </section>
@@ -147,6 +148,7 @@
           <span id="tl-frame" class="mono big">0</span>
           <span id="tl-total" class="mono dim">/ 0</span>
           <span id="tl-fps" class="mono dim"></span>
+          <span id="tl-range" class="mono dim"></span>
         </div>
       </div>
     </section>
@@ -186,13 +188,13 @@
   <dialog id="render-dialog">
     <form method="dialog">
       <div class="h2">Render</div>
-      <label>Output<div class="hrow"><input id="rd-path" type="text" placeholder="F:\renders\shot_fx.mov"><button type="button" id="rd-browse">…</button></div></label>
+      <label>Output<div class="hrow"><input id="rd-path" type="text" placeholder="output path, e.g. shot_fx.mov or shot_fx.png" spellcheck="false"><button type="button" id="rd-browse">…</button></div></label>
       <div class="hrow">
         <label class="grow">Codec<select id="rd-codec"></select></label>
         <label>Chunk<input id="rd-chunk" type="number" min="0" value="0" title="frames per GPU chunk, 0 = auto"></label>
       </div>
       <div class="hrow">
-        <label class="grow">Range<div class="hrow"><input id="rd-start" type="number" min="0"><span class="dim">to</span><input id="rd-end" type="number" min="1"></div></label>
+        <label class="grow">Range (timeline frames, end exclusive)<div class="hrow"><input id="rd-start" type="number" min="0"><span class="dim">to</span><input id="rd-end" type="number" min="1"></div></label>
         <label class="check"><input id="rd-audio" type="checkbox" checked> copy audio</label>
       </div>
       <div class="hrow">

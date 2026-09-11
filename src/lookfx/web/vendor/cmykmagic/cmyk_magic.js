@@ -386,6 +386,7 @@ function buildPanel(node) {
     // =====================================================  LEFT: preview
     const left = el("div", { width: "204px", flexShrink: "0", display: "flex",
                              flexDirection: "column", gap: "6px" });
+    left.className = "cmyk-left"; // lookfx: hook for the dock's stacked layout (app.css)
 
     const titleRow = el("div", { ...S.row, gap: "5px" });
     const rosette = el("canvas", { width: "18px", height: "18px" });
@@ -412,6 +413,7 @@ function buildPanel(node) {
                                     borderRadius: "3px", opacity: "0",
                                     transition: "opacity .12s", pointerEvents: "none" },
                            { textContent: "rendering" });
+    previewWrap.className = "cmyk-preview"; // lookfx: layout hook
     previewWrap.appendChild(previewImg);
     previewWrap.appendChild(previewNote);
     previewWrap.appendChild(previewBusy);
@@ -426,6 +428,7 @@ function buildPanel(node) {
                                   letterSpacing: "0.08em", textTransform: "uppercase",
                                   marginBottom: "3px" }, { textContent: "help" });
     const helpBody = el("div", {}, { textContent: "Hover any control for what it does." });
+    helpBox.className = "cmyk-help"; // lookfx: layout hook
     helpBox.appendChild(helpTitle);
     helpBox.appendChild(helpBody);
     left.appendChild(helpBox);
@@ -453,6 +456,7 @@ function buildPanel(node) {
                               flexDirection: "column", gap: "7px",
                               overflowY: "auto", overflowX: "hidden",
                               paddingRight: "2px" });
+    right.className = "cmyk-right"; // lookfx: layout hook
     root.appendChild(right);
 
     node.properties = node.properties || {};
@@ -608,6 +612,7 @@ function buildPanel(node) {
                                flexDirection: "column" });
     const lowerR = el("div", { flex: "1", minWidth: "0", display: "flex",
                                flexDirection: "column" });
+    lower.className = "cmyk-lower"; // lookfx: the dock wraps the two columns under ~700 px (app.css)
     lower.appendChild(lowerL);
     lower.appendChild(lowerR);
 
