@@ -173,7 +173,10 @@ class ProjectSession:
             src.cache(ctx)
             self.source, self._opened_input = src, spec
             self._adopt_pending_solves()
-        wanted = {name: dict(s) for name, s in (self.project.aux or {}).items() if s and s.get("path")}
+        # path_rel is bookkeeping written by Project.save; it must not read as
+        # a changed aux and trigger a re-decode
+        wanted = {name: {k: v for k, v in s.items() if k != "path_rel"}
+                  for name, s in (self.project.aux or {}).items() if s and s.get("path")}
         for name in list(self.aux):
             if wanted.get(name) != self._opened_aux.get(name):
                 self.aux.pop(name).close()

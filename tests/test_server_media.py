@@ -308,3 +308,26 @@ def test_input_fps_redecodes_stills_only(client, clip, tmp_path):
     r = client.put(f"/api/project/{pid}", json=dict(vdoc, input={"path": str(clip / "clip.mkv"), "range": [1, None], "fps": 60})).json()
     assert r["proxy_job"] and wait_job(client, r["proxy_job"])["state"] == "done"
     assert sess.source is not first and client.get(f"/api/project/{pid}").json()["media"]["frames"] == N - 1
+
+
+def test_saving_a_project_does_not_re_decode_the_aux(client, clip, tmp_path):
+    """Project.save adds path_rel to every media spec; that is bookkeeping, not a
+    changed source, so the depth cache must survive the next open_media."""
+    from fractions import Fraction
+    from lookfx_core.io.writer import open_sink
+    s = open_sink(tmp_path / "depth2.mkv", width=W, height=H, fps=Fraction(24), codec="ffv1")
+    s.write(torch.full((N, H, W, 3), 0.5))
+    s.close()
+    doc = {"schema_version": 1, "input": {"path": str(clip / "clip.mkv"), "range": [0, None]},
+           "aux": {"depth": {"path": str(tmp_path / "depth2.mkv")}}, "output": {"path": ""},
+           "chain": [{"effect": "flare", "params": {}}]}
+    pid, _info = open_clip(client, None, project=doc)
+    session = client.app_ref.state.sessions.get(pid)
+    depth_before = session.aux.get("depth")
+    assert depth_before is not None
+    assert client.post(f"/api/project/{pid}/save",
+                       json={"path": str(tmp_path / "p.lookfx.json")}).status_code == 200
+    assert "path_rel" in session.project.aux["depth"]        # save relativised the live doc
+    session._open_media(None)
+    assert session.aux.get("depth") is depth_before          # same FrameSource: no re-decode
+

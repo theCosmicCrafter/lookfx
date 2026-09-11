@@ -145,3 +145,26 @@ def test_suggest_without_media_uses_the_videos_folder(client, monkeypatch, tmp_p
     r = client.post("/api/output/suggest", json={"project_id": pid}).json()
     assert r["folder"] == str(tmp_path / "Videos" / "LookFX") and (tmp_path / "Videos" / "LookFX").is_dir()
     assert r["path"] == str(tmp_path / "Videos" / "LookFX" / "untitled_look_v001.mov")      # no clip, no chain
+
+
+def test_suggest_rejects_a_relative_folder(tmp_path_factory, tmp_path):
+    """A relative folder would be created next to the server process (the repo
+    folder in the shipped launcher), so mode 'folder' takes absolute paths only."""
+    client, _app = make_client(tmp_path_factory.mktemp("scratch"), tmp_path_factory.mktemp("user"))
+    d = tmp_path_factory.mktemp("clip")
+    make_clip(d)
+    pid, _info = open_clip(client, d / "clip.mkv")
+    cwd = Path.cwd()
+    before = set(cwd.iterdir())
+    r = client.post("/api/output/suggest", json={"project_id": pid, "mode": "folder",
+                                                 "folder": "../../escaped/out", "ext": ".mov"})
+    assert r.status_code == 400 and "absolute" in r.json()["detail"]
+    assert set(cwd.iterdir()) == before                      # nothing created next to the process
+    target = tmp_path / "renders"
+    r = client.post("/api/output/suggest", json={"project_id": pid, "mode": "folder",
+                                                 "folder": str(target), "ext": ".mov"})
+    assert r.status_code == 200
+    body = r.json()
+    assert Path(body["path"]).is_absolute() and Path(body["folder"]).is_absolute()
+    assert target.is_dir()
+

@@ -562,7 +562,11 @@ def create_app(scratch_dir: str | None = None, token: str | None = None) -> Fast
         if body.mode == "folder":
             if not body.folder:
                 raise HTTPException(400, "folder is required for mode 'folder'")
+            # absolute only: a relative folder would be created next to the
+            # server process (the repo, in the shipped launcher)
             folder = Path(body.folder)
+            if not folder.is_absolute():
+                raise HTTPException(400, f"folder must be an absolute path, got {body.folder!r}")
         elif body.mode == "project" and s.path is not None:
             folder = Path(s.path).resolve().parent
         else:
