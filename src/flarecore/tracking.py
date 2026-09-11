@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# Modified for lookfx (see VENDORED.md)
 """Video nodes: temporally stable light tracks and keyframed light motion.
 
 Both emit FLARE_LIGHTS — a list with one entry per frame, each entry a list

@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# Modified for lookfx (see VENDORED.md)
 """Independent flare instances, accumulated in linear light before compositing."""
 import torch
 
@@ -65,11 +66,26 @@ def validate_groups(raw, specs=None):
     return groups
 
 
+def group_options(p, group):
+    """The render params one group solves and renders with: the step's
+    params, the group's own preset, and its source settings on top."""
+    options = dict(p)
+    options['preset'] = group['preset']
+    source = group.get('source', {})
+    options.update({key: value for key, value in source.items() if key in SOURCE_FIELDS})
+    return options
+
+
 def render_groups(image, raw, p, *, depth=None, lights=None, device=None, ctx=None,
-                  frame_offset=0, lights_final=False):
+                  frame_offset=0, lights_final=False, group_lights=None):
     """Render every enabled group as its own linear pass over the ORIGINAL
     plate and depth (no group detects or occludes against the flares of
-    groups rendered before it), sum them, then composite once."""
+    groups rendered before it), sum them, then composite once.
+
+    ``group_lights`` ({group id: per-frame light lists}) are a group's OWN
+    whole-clip solve (``FlareEffect.analyze``): a group listed there renders
+    those lights as final, whatever its ``use_lights_input`` says, so a
+    chunked render cannot re-solve the group on a slice of the clip."""
     from .render import render_flare, FlareResult, _source_status
 
     groups = validate_groups(raw)
@@ -81,14 +97,16 @@ def render_groups(image, raw, p, *, depth=None, lights=None, device=None, ctx=No
         if not group.get('enabled', True):
             results[group['id']] = {'track': [], 'source': 'disabled', 'status': 'Group disabled.'}
             continue
-        options = dict(p)
-        options['preset'] = group['preset']
+        options = group_options(p, group)
         source = group.get('source', {})
-        options.update({key: value for key, value in source.items() if key in SOURCE_FIELDS})
-        group_lights = lights if source.get('use_lights_input', False) else None
-        res = render_flare(image, options, depth=depth, lights=group_lights,
+        if group_lights is not None and group['id'] in group_lights:
+            solved, final = group_lights[group['id']], True
+        else:
+            solved = lights if source.get('use_lights_input', False) else None
+            final = lights_final and solved is not None
+        res = render_flare(image, options, depth=depth, lights=solved,
                            device=device, ctx=ctx, frame_offset=frame_offset,
-                           lights_final=lights_final and group_lights is not None, _group_pass=True)
+                           lights_final=final, _group_pass=True)
         total.add_(res.flare_pass)
         results[group['id']] = {
             'track': res.track, 'source': res.light_source,

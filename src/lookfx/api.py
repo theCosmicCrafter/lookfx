@@ -78,21 +78,14 @@ def render_still(src: str | Path, dst: str | Path, chain, ctx: RunContext | None
 
 
 def preview_chain(chain, factor: float) -> list[ChainStep]:
-    """Resolution-dependent effects (the print look's screen pitch) get their
-    pixel-unit params scaled by the proxy factor so the preview reads like
-    the final render."""
-    steps = []
-    for s in chain:
-        s = s if isinstance(s, ChainStep) else ChainStep.from_json(s)
-        if s.effect == "print_look" and factor < 1.0:
-            p = dict(s.params)
-            for key in ("scale", "plate_drift"):
-                if key in p and p[key] is not None:
-                    p[key] = max(effects.get("print_look").params[key].min or 0.0,
-                                 float(p[key]) * factor)
-            s = ChainStep(s.effect, p, s.enabled, s.version)
-        steps.append(s)
-    return steps
+    """The chain a proxy preview renders with, as ``ChainStep`` objects.
+
+    No params are rescaled by the proxy ``factor``: every effect already
+    expresses its look in resolution-independent units (the print look's
+    screen pitch and plate drift are normalised by the frame's own size in
+    ``cmykmagic.engine``), so a downscaled preview reads like the final
+    render as is; scaling them here made the halftone 1/factor too fine."""
+    return [s if isinstance(s, ChainStep) else ChainStep.from_json(s) for s in chain]
 
 
 def preview_png(frames: torch.Tensor, chain, max_side: int = 768,
