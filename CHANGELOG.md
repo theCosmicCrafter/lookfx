@@ -50,6 +50,16 @@ first (untested) macOS / Linux launch path.
 - `PUT /api/project/{pid}` ignores `path_rel` when deciding whether the media changed, so a
   page that round-trips a freshly saved document does not trigger a proxy job.
 
+### Fixed
+
+- README rewritten to lead with what the app does (flare tracking, occlusion, the ink layer,
+  clip workflow) before the credits and the install steps, with an example strip.
+- Tone-map uses mobius against a 100-nit reference (the previous hable/npl pair darkened
+  everything by about a stop); an ffmpeg without zscale/tonemap now falls back to a clipped
+  decode instead of failing.
+- `POST /api/output/suggest` refuses a relative folder; saving a project no longer re-decodes
+  the attached depth clip.
+
 ## [0.1.0] - 2026-09-11
 
 First public work-in-progress release.
