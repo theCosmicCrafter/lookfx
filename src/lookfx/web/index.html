@@ -66,6 +66,8 @@
       <div class="toolbar">
         <span id="src-name" class="strong">—</span>
         <span id="src-meta" class="mono dim"></span>
+        <label class="fps-ctl" id="src-fps-ctl" hidden title="Frame rate of a still or image sequence (the project's input.fps); empty = 24. Videos keep their own rate."><span class="mono dim">fps</span><input id="src-fps" type="number" min="1" max="240" step="any" placeholder="24"></label>
+        <span id="src-hdr" class="tag mono" hidden title="The source is HDR (PQ / HLG transfer or BT.2020 primaries): it is tone-mapped to SDR on decode and every output is BT.709">HDR → SDR (tone-mapped)</span>
         <span class="vsep"></span>
         <div class="seg" id="view-seg">
           <button data-view="result" class="on">Result</button>
@@ -176,13 +178,44 @@
           <div class="h1">Settings</div>
           <div class="dim lead">Compute, tools and where your files live.</div>
           <div id="settings-groups"></div>
+          <!-- Output preferences: the "output" object of the UI settings blob
+               (GET/PUT /api/settings/ui); folders left empty fall back to the
+               per-platform defaults from GET /api/settings/defaults. -->
+          <div class="sgroup" id="output-settings">
+            <span class="label">Output</span>
+            <div class="box">
+              <div class="srow col">
+                <div>Default render location<div class="hint">Where the Render dialog proposes to write; the path stays editable there.</div></div>
+                <div class="radios">
+                  <label><input type="radio" name="out-mode" id="out-mode-source" value="source"> next to the source clip</label>
+                  <label><input type="radio" name="out-mode" id="out-mode-folder" value="folder"> fixed folder</label>
+                  <label><input type="radio" name="out-mode" id="out-mode-project" value="project"> next to the project file</label>
+                </div>
+                <div class="hrow"><input id="out-folder" type="text" spellcheck="false" placeholder="folder for renders"><button type="button" id="out-folder-pick" class="mini" title="Choose the render folder">…</button></div>
+              </div>
+              <div class="srow col">
+                <div>Filename template<div class="hint">Tokens: <code>{clip}</code> source file name · <code>{look}</code> first flare preset (else the first effect) · <code>{ver}</code> next free version, three digits · <code>{date}</code> YYYYMMDD · <code>{project}</code> project file name or <i>untitled</i>. The extension follows the codec.</div></div>
+                <div class="hrow"><input id="out-template" type="text" spellcheck="false" placeholder="{clip}_{look}_v{ver}"><button type="button" id="out-template-reset" class="mini" title="Back to the default template">reset</button></div>
+                <div class="mono dim" id="out-example"></div>
+              </div>
+              <div class="srow col">
+                <div>Default project location<div class="hint">Where <i>Save as…</i> (and the first <i>Save</i>) opens, with the same template and a <code>.lookfx.json</code> extension.</div></div>
+                <div class="radios">
+                  <label><input type="radio" name="out-pmode" id="out-pmode-source" value="source"> next to the source clip</label>
+                  <label><input type="radio" name="out-pmode" id="out-pmode-folder" value="folder"> fixed folder</label>
+                </div>
+                <div class="hrow"><input id="out-pfolder" type="text" spellcheck="false" placeholder="folder for projects"><button type="button" id="out-pfolder-pick" class="mini" title="Choose the project folder">…</button></div>
+              </div>
+            </div>
+          </div>
           <div class="sgroup" id="limitations">
             <span class="label">Limitations</span>
             <div class="box"><ul class="limits">
-              <li><b>SDR only.</b> Frames are processed as 16-bit sRGB; HDR (PQ / HLG, BT.2020) clips are treated as SDR and every output is tagged BT.709.</li>
-              <li><b>EXR is input-only</b> (decoded to sRGB). Outputs are PNG / TIFF / JPEG stills, PNG / TIFF sequences or video. Stills and sequences play at 24 fps unless the project sets an input frame rate.</li>
-              <li><b>Audio is copied, not processed.</b> A ranged render keeps the matching slice of the audio; it is re-encoded (AAC / PCM) when the range does not start at 0 or the codec does not fit the container.</li>
-              <li><b>One clip per project</b>, with media paths stored absolute; use <i>Relink clip</i> when a file moves. A project opened next to its media resolves a missing path relative to the project file.</li>
+              <li><b>SDR only.</b> HDR sources (PQ / HLG transfer, BT.2020 primaries) are tone-mapped to SDR on decode, not passed through; frames are processed as 16-bit sRGB and every output is tagged BT.709. The source header shows an <i>HDR → SDR</i> badge for such clips.</li>
+              <li><b>EXR is input-only</b> (decoded to sRGB). Outputs are PNG / TIFF / JPEG stills, PNG / TIFF sequences or video. Stills and sequences play at 24 fps unless the <i>fps</i> field in the source header sets another rate.</li>
+              <li><b>Audio is copied, not processed.</b> A ranged render keeps the matching slice of the audio; it is re-encoded (AAC / PCM) when the range does not start at 0 or the codec does not fit the container. A sequence output gets the audio as a <code>.wav</code> sidecar next to the sequence (full-range renders; the Queue shows its path).</li>
+              <li><b>One clip per project</b>, with media paths stored absolute plus a relative copy; use <i>Relink clip</i> when a file moves. A project opened next to its media resolves a missing path relative to the project file.</li>
+              <li><b>A ranged render reuses the clip solve</b> when it covers the range and only re-solves when none exists.</li>
               <li><b>Windows desktop shell only</b>; the browser UI (<code>lookfx serve</code>) is the cross-platform path.</li>
             </ul></div>
           </div>

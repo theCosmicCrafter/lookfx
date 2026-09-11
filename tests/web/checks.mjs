@@ -12,7 +12,8 @@ globalThis.window = globalThis;
 const web = new URL("../../src/lookfx/web/", import.meta.url);
 const { Store, store } = await import(new URL("store.js", web));
 const { coerceParam, FakeNode } = await import(new URL("nodes.js", web));
-const { outputPathFor, stemOf, CODEC_EXT } = await import(new URL("paths.js", web));
+const { outputPathFor, stemOf, CODEC_EXT, extFamily, suggestExt } = await import(new URL("paths.js", web));
+const { DEFAULT_TEMPLATE, OUTPUT_DEFAULTS, slugify, lookNameFor, defaultFolder, normaliseOutputPrefs, hasVersionToken, expandTemplate, templateExample } = await import(new URL("output.js", web));
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let n = 0;
@@ -102,6 +103,65 @@ check("video codecs follow their container; still keeps the typed extension", ()
   assert.equal(outputPathFor("", "prores"), "");
   assert.equal(stemOf("/a.b/c.d/e"), "/a.b/c.d/e");
   assert.deepEqual(Object.keys(CODEC_EXT).sort(), ["ffv1", "h264", "h264_nvenc", "hevc_nvenc", "png8_seq", "png_seq", "prores", "prores_4444", "tiff_seq"]);
+});
+
+// --- output-ui: the filename template and the output prefs ------------------
+check("template tokens expand like the server's suggest (CONTRACT 4)", () => {
+  const date = new Date(2026, 8, 11);          // 11 Sep 2026, local
+  assert.equal(expandTemplate("{clip}_{look}_v{ver}", { clip: "shot", look: "cine-blue", ver: 1, date }), "shot_cine-blue_v001");
+  assert.equal(expandTemplate("{date}-{project}-{ver}", { project: "reel", ver: 12, date }), "20260911-reel-012");
+  assert.equal(expandTemplate("{clip}_v{ver}", { clip: "shot", ver: 1000 }), "shot_v1000");   // grows past three digits
+  assert.equal(expandTemplate("{clip}_{nope}", { clip: "a" }), "a_{nope}");                  // a typo stays visible
+  assert.equal(expandTemplate("", { clip: "a", look: "b" }), "a_b_v001");                     // empty -> default
+  assert.equal(expandTemplate("{clip}_{look}_{project}", { clip: "" }), "clip_look_untitled");
+  assert.equal(DEFAULT_TEMPLATE, "{clip}_{look}_v{ver}");
+  assert.ok(hasVersionToken(DEFAULT_TEMPLATE) && !hasVersionToken("{clip}_{look}"));
+});
+check("slugify and the {look} token", () => {
+  assert.equal(slugify("Cine Blue (warm)"), "cine-blue-warm");
+  assert.equal(slugify("  --x_y--  "), "x-y");
+  assert.equal(slugify(null), "");
+  const chain = [
+    { effect: "print_look", enabled: true, params: {} },
+    { effect: "flare", enabled: false, params: { preset: { name: "Off Flare" } } },
+    { effect: "flare", enabled: true, params: { preset: { name: "Cine Blue", preset_file: "cine_blue" } } },
+  ];
+  assert.equal(lookNameFor(chain), "cine-blue");                                   // first *enabled* flare, its display name
+  assert.equal(lookNameFor([{ effect: "flare", enabled: true, params: { preset: { preset_file: "cine_blue" } } }]), "cine-blue");
+  assert.equal(lookNameFor([{ effect: "flare", enabled: true, params: { preset: { groups: [1, 2] } } }]), "flare");   // a groups scene has no name
+  assert.equal(lookNameFor([{ effect: "print_look", enabled: true, params: {} }]), "print-look");
+  assert.equal(lookNameFor([{ effect: "flare", enabled: false, params: {} }]), "");
+  assert.equal(lookNameFor([]), "");
+});
+check("live example uses the open clip / chain / project, else sample names", () => {
+  const date = new Date(2026, 8, 11);
+  assert.equal(templateExample("{clip}_{look}_v{ver}", { date }), "shot_cine-blue_v001.mov");
+  const media = { path: "D:\\shots\\a.b\\take01.mov", kind: "video" };
+  const chain = [{ effect: "flare", enabled: true, params: { preset: { name: "Warm Sun" } } }];
+  assert.equal(templateExample("{project}/{clip}_{look}_{date}", { media, chain, projectPath: "D:\\p\\reel.lookfx.json", ext: ".png", date }),
+               "reel/take01_warm-sun_20260911.png");
+});
+check("output prefs normalise with the platform defaults (CONTRACT 3)", () => {
+  assert.deepEqual(normaliseOutputPrefs(null, {}), { mode: "source", folder: "", template: DEFAULT_TEMPLATE, project_mode: "source", project_folder: "" });
+  assert.deepEqual(normaliseOutputPrefs({}, {}), { ...OUTPUT_DEFAULTS });
+  const d = { videos_dir: "C:\\Users\\me\\Videos", documents_dir: "/home/me/Documents/" };
+  const p = normaliseOutputPrefs({ mode: "folder", template: "  {clip}_v{ver} ", project_mode: "bogus" }, d);
+  assert.equal(p.mode, "folder");
+  assert.equal(p.template, "{clip}_v{ver}");
+  assert.equal(p.project_mode, "source");
+  assert.equal(p.folder, "C:\\Users\\me\\Videos\\LookFX");           // empty -> <videos dir>/LookFX, platform separator
+  assert.equal(p.project_folder, "/home/me/Documents/LookFX");
+  assert.equal(normaliseOutputPrefs({ folder: "E:\\out", project_folder: " " }, d).folder, "E:\\out");
+  assert.equal(normaliseOutputPrefs({ mode: "nope", template: "" }, {}).mode, "source");
+  assert.equal(defaultFolder(""), "");
+  assert.equal(defaultFolder("D:/v/"), "D:/v/LookFX");
+});
+check("codec families and the extension a suggestion is asked for", () => {
+  assert.equal(extFamily("prores"), "video"); assert.equal(extFamily("ffv1"), "video");
+  assert.equal(extFamily("png_seq"), "sequence"); assert.equal(extFamily("tiff_seq"), "sequence");
+  assert.equal(extFamily("still"), "still");
+  assert.equal(suggestExt("prores"), ".mov"); assert.equal(suggestExt("h264_nvenc"), ".mp4"); assert.equal(suggestExt("tiff_seq"), ".tif");
+  assert.equal(suggestExt("still", "/x/a.jpg"), ".jpg"); assert.equal(suggestExt("still", "/x/a.mov"), ".png"); assert.equal(suggestExt("still"), ".png");
 });
 
 console.log(`1..${n}`);
