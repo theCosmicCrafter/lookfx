@@ -8,6 +8,7 @@ is built on the first request.
 
 from __future__ import annotations
 
+import functools
 import subprocess
 import tempfile
 from pathlib import Path
@@ -17,7 +18,7 @@ import numpy as np
 import torch
 
 from ..tensors import from_uint16
-from .ffmpeg import Proc, FFmpegError
+from .ffmpeg import Proc, FFmpegError, find_ffmpeg
 from .probe import MediaInfo, probe, HDR_TRANSFERS
 
 BYTES_PER_PIXEL = 6   # rgb48le
@@ -36,7 +37,17 @@ _ZSCALE_MATRICES = {"bt709", "fcc", "bt470bg", "smpte170m", "smpte240m", "ycgco"
                     "chroma-derived-nc", "chroma-derived-c", "ictcp"}
 # nominal peak luminance zscale linearises against: PQ is absolute (100 nits =
 # SDR reference white), HLG is scene-referred with a 1000-nit nominal display
-_HDR_NPL = {"smpte2084": 100, "arib-std-b67": 1000}
+# Nominal peak luminance handed to zscale, in nits. Both curves are decoded
+# against a 100-nit reference so diffuse white lands near 1.0 after the
+# tone-map: measured on an SDR ramp round-tripped through PQ and HLG, npl=100
+# returns mean 0.535 / 0.579 against the 0.5 source, while the "correct" HLG
+# peak of 1000 lands at 0.22 — a two-stop loss on ordinary phone footage.
+_HDR_NPL = {"smpte2084": 100, "arib-std-b67": 100}
+
+# mobius, not hable: hable's shoulder starts low enough to pull diffuse white
+# down to 0.62 (measured), a stop under the source, while mobius stays linear
+# below the knee and only bends the highlights (0.84 on the same ramp).
+_TONEMAP = "tonemap=tonemap=mobius:desat=0"
 
 
 def _linear_input_args(path: str | None) -> list[str]:
@@ -80,15 +91,31 @@ def _colour_filter(info: MediaInfo) -> str | None:
     return f"scale=in_color_matrix={matrix}" if matrix else None
 
 
+@functools.lru_cache(maxsize=1)
+def _hdr_filters_available() -> bool:
+    """Whether this ffmpeg has the filters the HDR chain needs.
+
+    zscale (zimg) and tonemap are optional at build time; a minimal or distro
+    build has neither. Probed once: without them an HDR source still decodes,
+    through swscale, with the highlights clipped rather than rolled off."""
+    try:
+        out = subprocess.run([find_ffmpeg(), "-hide_banner", "-filters"],
+                             capture_output=True, text=True, timeout=20).stdout
+    except Exception:
+        return False
+    names = {parts[1] for parts in (line.split() for line in out.splitlines()) if len(parts) > 2}
+    return {"zscale", "tonemap"} <= names
+
+
 def _hdr_filter(info: MediaInfo) -> str | None:
     """HDR -> SDR on decode, so the pipe stays display-referred sRGB/BT.709:
     zscale linearises the source (its own YUV -> RGB with the tagged matrix),
     maps BT.2020 primaries to BT.709, PQ/HLG highlights are tone-mapped
-    (hable, no desaturation), and the result is re-encoded with the BT.709
+    (mobius, no desaturation), and the result is re-encoded with the BT.709
     curve as rgb48le. Wide-gamut SDR (BT.2020 primaries, SDR transfer) only
     gets the gamut conversion. The input tags are passed explicitly: zimg
     refuses an untagged matrix, and HDR is BT.2020 in practice."""
-    if not info.hdr:
+    if not info.hdr or not _hdr_filters_available():
         return None
     trc = (info.color_transfer or "").lower()
     prim = (info.color_primaries or "").lower()
@@ -101,7 +128,7 @@ def _hdr_filter(info: MediaInfo) -> str | None:
     linear += ":t=linear"
     if tin in HDR_TRANSFERS:
         linear += f":npl={_HDR_NPL[tin]}"
-        tone = ["tonemap=tonemap=hable:desat=0"]
+        tone = [_TONEMAP]
     else:
         tone = []
     return ",".join([linear, "format=gbrpf32le", "zscale=p=bt709", *tone, "zscale=t=bt709", "format=rgb48le"])

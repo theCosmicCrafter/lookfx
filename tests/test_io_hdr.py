@@ -3,6 +3,7 @@ SDR decode stays untouched."""
 
 import subprocess
 from fractions import Fraction
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
@@ -117,3 +118,38 @@ def test_sdr_roundtrip_stays_bit_exact(tmp_path):
     with open_source(s.path) as src:
         got = np.stack(list(src.stream()))
     assert np.array_equal(got, ref)
+
+
+def test_tonemap_keeps_diffuse_white(tmp_path):
+    """The tone-map may roll the highlights off; it must not darken the picture.
+
+    Measured against the same clip decoded through the identical chain with the
+    tonemap filter removed: mobius keeps ~95% of the mean, the hable/npl pair
+    this replaced returned ~65% — a stop under across the whole range.
+    """
+    clip = _tagged_clip(tmp_path / "pq_ramp.mkv", trc="smpte2084", frames=1)
+    with open_source(clip) as s:
+        assert s.info.hdr and s.info.tonemapped
+        chain = _hdr_filter(s.info)
+        frame = s.read(0, 1)[0]
+    assert "tonemap=" in chain
+    raw = subprocess.run([find_ffmpeg(), "-v", "error", "-i", str(clip), "-vf",
+                          ",".join(p for p in chain.split(",") if not p.startswith("tonemap=")),
+                          "-f", "rawvideo", "-pix_fmt", "rgb48le", "-"], capture_output=True, check=True).stdout
+    reference = np.frombuffer(raw, dtype=np.uint16).astype(np.float32).reshape(H, W, 3) / 65535.0
+    assert float(frame.mean()) > 0.85 * float(reference.mean())
+    assert float(frame.max()) > 0.80          # diffuse white stays white
+
+
+def test_no_hdr_filter_without_zscale(tmp_path, monkeypatch):
+    """A build without zscale/tonemap still decodes HDR (clipped, not broken)."""
+    import lookfx_core.io.reader as rd
+    info = probe(_tagged_clip(tmp_path / "pq2.mkv", trc="smpte2084"))   # shells out: before the patch
+    rd._hdr_filters_available.cache_clear()
+    # a build whose -filters listing carries neither zscale nor tonemap
+    monkeypatch.setattr(rd.subprocess, "run", lambda *a, **k: SimpleNamespace(stdout=" T.. scale  V->V  Scale.\n"))
+    try:
+        assert rd._hdr_filters_available() is False
+        assert info.hdr and rd._hdr_filter(info) is None     # decode falls back to swscale
+    finally:
+        rd._hdr_filters_available.cache_clear()
