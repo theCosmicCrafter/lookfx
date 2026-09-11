@@ -2,8 +2,8 @@
 
     lookfx render IN OUT [--project P.json] [--flare PRESET] [--light u,v] [--print PRESET]
     lookfx presets [flare|print_look]
-    lookfx probe MEDIA                 (Phase 2)
-    lookfx serve [--port N]            (Phase 3)
+    lookfx probe MEDIA
+    lookfx serve [--port N]
 """
 
 from __future__ import annotations
@@ -16,8 +16,11 @@ import threading
 from pathlib import Path
 
 from lookfx_core.chain import ChainStep
+from lookfx_core.io.writer import CODECS
 from lookfx_core.progress import RunContext, Progress, Cancelled
 from lookfx_core.project import Project
+
+from . import __version__
 
 
 def _chain_from_args(a) -> list[ChainStep]:
@@ -110,6 +113,10 @@ def cmd_render(a) -> int:
     except Cancelled:
         print("\ncancelled", file=sys.stderr)
         return 130
+    except (ValueError, FileNotFoundError) as e:
+        # bad preset name / codec / missing input: a one-line message, not a traceback
+        print(f"error: {e}", file=sys.stderr)
+        return 2
 
 
 def cmd_presets(a) -> int:
@@ -139,6 +146,7 @@ def cmd_serve(a) -> int:
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="lookfx", description=__doc__,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
+    p.add_argument("--version", action="version", version=f"lookfx {__version__}")
     sub = p.add_subparsers(dest="cmd", required=True)
 
     r = sub.add_parser("render", help="render a still, image sequence or video through an effect chain")
@@ -151,7 +159,8 @@ def build_parser() -> argparse.ArgumentParser:
     r.add_argument("--depth", help="depth map (still or clip) for flare occlusion")
     r.add_argument("--plates", help="also write the print-look plates here")
     r.add_argument("--flare-pass", help="also write the flare pass here")
-    r.add_argument("--codec", default=None, help="video codec key (prores, h264, h264_nvenc, hevc_nvenc, ffv1, png_seq)")
+    r.add_argument("--codec", default=None, choices=sorted(CODECS), metavar="CODEC",
+                   help="video codec key: " + ", ".join(CODECS))
     r.add_argument("--start", type=int, default=0)
     r.add_argument("--end", type=int, default=None)
     r.add_argument("--chunk", type=int, default=0, help="frames per GPU chunk (0 = auto)")

@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# Modified for lookfx (see VENDORED.md); upstream: cyco-creates/Flarecore, Apache-2.0
 """Condition a depth map for use as a flare occluder.
 
 Takes the output of any depth source (Depth Anything, MiDaS, Zoe, Metric3D,

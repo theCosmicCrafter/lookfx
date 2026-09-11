@@ -8,7 +8,7 @@
 ## Local changes (keep this list current)
 
 - Dropped: `web/` (moved to `lookfx/web/vendor/cmykmagic` for the UI port), `docs/images/`, `pyproject.toml`, `.comfyignore`.
-- `docs/generate_docs_images.py` → repo `scripts/generate_cmyk_docs_images.py`.
+- `docs/generate_docs_images.py` kept for reference only (ComfyUI-specific; not ported, not run).
 - `engine.py`: `comfy.model_management` replaced by `lookfx_core.device`; `run_cmyk_magic(..., device=None, out_device=None)`.
 - `cmyk_magic.py` -> `settings.py` (node class removed; `_parse_cfg` accepts a dict; `run_resolved(..., device=...)`). `params.py`: `PRINT_PARAMS` from the original `INPUT_TYPES`.
 - `preview.py`: node-id input cache removed; `render_png(source, ...)` takes the source frame; `thumbnail()` added.

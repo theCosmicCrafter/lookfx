@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+# Modified for lookfx (see VENDORED.md); upstream: marcsole96/ComfyUI-CMYK-Magic, MIT
 """CMYK Magic engine: Retratone-style custom-ink halftone separation.
 
 Pipeline: grade -> separate the image into per-ink coverage plates (color-match

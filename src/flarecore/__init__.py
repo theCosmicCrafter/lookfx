@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# Modified for lookfx (see VENDORED.md); upstream: cyco-creates/Flarecore, Apache-2.0
 """flarecore — procedural lens-flare engine (lookfx fork of comfyui-flarecore,
 Apache-2.0). No ComfyUI dependency; see VENDORED.md.
 
@@ -15,7 +16,7 @@ orchestration that used to live in the ComfyUI node layer:
 - ``effect``        ``FlareEffect`` for the lookfx chain
 """
 
-__version__ = "0.1.2"
+__version__ = "0.1.2b1"   # upstream version vendored (matches NOTICE / VENDORED.md)
 
 from .params import RENDER_PARAMS, DEFAULT_PRESET
 from .render import render_flare, analyze_lights, render_pass_linear, FlareResult

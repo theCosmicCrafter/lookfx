@@ -3,8 +3,14 @@
   "configurations": [
     {
       "name": "lookfx-server",
-      "runtimeExecutable": "F:\lookfx\.venv\Scripts\python.exe",
-      "runtimeArgs": ["-m", "lookfx.cli", "serve", "--port", "8765"],
+      "runtimeExecutable": ".venv\\Scripts\\python.exe",
+      "runtimeArgs": [
+        "-m",
+        "lookfx.cli",
+        "serve",
+        "--port",
+        "8765"
+      ],
       "port": 8765
     }
   ]

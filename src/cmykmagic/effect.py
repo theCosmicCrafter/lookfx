@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+# Added in the lookfx fork (see VENDORED.md); package upstream: marcsole96/ComfyUI-CMYK-Magic, MIT
 """Print Look: the CMYK Magic engine as a lookfx Effect."""
 
 from __future__ import annotations

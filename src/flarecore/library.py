@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# Modified for lookfx (see VENDORED.md); upstream: cyco-creates/Flarecore, Apache-2.0
 """The element texture library: elements/<category>/<name>.png.
 
 Presets reference textures by relative path; this module resolves those

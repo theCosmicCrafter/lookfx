@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+# Vendored unmodified from marcsole96/ComfyUI-CMYK-Magic, MIT (see VENDORED.md)
 """Explanations shown in the panel's help strip.
 
 The node models a real printing process, so most controls need a sentence of

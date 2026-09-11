@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# Modified for lookfx (see VENDORED.md); upstream: cyco-creates/Flarecore, Apache-2.0
 """Parameter schema for the Flare effect.
 
 ``_REQUIRED`` is the upstream FlareRender ``INPUT_TYPES()["required"]`` dict

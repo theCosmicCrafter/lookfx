@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# Modified for lookfx (see VENDORED.md); upstream: cyco-creates/Flarecore, Apache-2.0
 """Making custom flare element textures (lookfx fork).
 
 The pipeline: ``pick_prompt`` hands an editable, categorised prompt to
