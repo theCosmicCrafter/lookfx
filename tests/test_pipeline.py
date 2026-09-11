@@ -14,7 +14,7 @@ from lookfx_core.progress import RunContext, Cancelled
 from lookfx_core.project import Project
 from lookfx.pipeline import run_project
 
-pytestmark = pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="ffmpeg not on PATH")
+pytestmark = pytest.mark.needs_ffmpeg   # skip / fail decided in tests/conftest.py
 
 N, H, W = 8, 64, 96
 

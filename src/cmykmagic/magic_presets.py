@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+# Vendored unmodified from marcsole96/ComfyUI-CMYK-Magic, MIT (see VENDORED.md)
 """Preset library for CMYK Magic.
 
 Each preset is a full parameter set plus an ink_config. In the UI, picking a

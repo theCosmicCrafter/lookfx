@@ -12,7 +12,7 @@ from fastapi.testclient import TestClient
 from lookfx_core.io.writer import open_sink
 from lookfx.server.app import create_app
 
-pytestmark = pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="ffmpeg not on PATH")
+pytestmark = pytest.mark.needs_ffmpeg   # skip / fail decided in tests/conftest.py
 
 N, H, W = 6, 48, 64
 

@@ -9,7 +9,7 @@
 
 - `flare/colorspace.py` — re-exports `lookfx_core.colorspace` (implementation moved there).
 - `tests/*` — `from flare.` → `from flarecore.flare.`; `conftest.py` no longer re-execs the package.
-- Dropped: `web/` (moved to `lookfx/web/vendor/flarecore` for the UI port), `example_workflows/`, `scripts/` (moved to repo `scripts/`), `pyproject.toml`, `requirements.txt`, `Flarecore_cover.png`.
+- Dropped: `web/` (moved to `lookfx/web/vendor/flarecore` for the UI port), `example_workflows/`, `scripts/` (ComfyUI-only collection builders; not ported), `pyproject.toml`, `requirements.txt`, `Flarecore_cover.png`.
 - `nodes/` removed; its logic became plain modules: `render.py` (`render_flare` / `analyze_lights` / `render_pass_linear`, `FlareResult`; ComfyUI device/cache/preview code dropped; `lights_final` + `frame_offset` for chunked video), `groups.py` (`render_groups` returns `FlareResult`; validation via `RENDER_PARAMS`), `library.py` (user + shipped element dirs), `presets_io.py` (listing/loading/saving/previews; saves go to the user library), `tracking.py` (`track_clip`, `keyframes_to_lights`), `depth_adapter.py` (`adapt_depth`), `elements_lab.py` (`pick_prompt`, `prepare_texture`, `save_element`; `FlareGeneratorSelect` dropped).
 - `params.py`: `RENDER_PARAMS` built from the original `INPUT_TYPES` dict (`preset_json` -> `preset`, a JSON object).
 - `effect.py`: `FlareEffect` for the lookfx chain. `__init__.py` rewritten (no re-exec trick, no routes).

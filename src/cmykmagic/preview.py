@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+# Modified for lookfx (see VENDORED.md); upstream: marcsole96/ComfyUI-CMYK-Magic, MIT
 """Live preview for the CMYK Magic panel.
 
 The panel renders its preview by calling the real engine on a small thumbnail,

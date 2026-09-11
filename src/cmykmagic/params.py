@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+# Added in the lookfx fork (see VENDORED.md); package upstream: marcsole96/ComfyUI-CMYK-Magic, MIT
 """Parameter schema for the Print Look effect.
 
 The ``_REQUIRED`` dict is the upstream node's ``INPUT_TYPES()["required"]``

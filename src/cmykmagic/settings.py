@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+# Modified for lookfx (see VENDORED.md); upstream: marcsole96/ComfyUI-CMYK-Magic, MIT
 """CMYK Magic settings: Retratone-style custom-ink halftone (lookfx fork).
 
 The ink set (colors, order, background, blend mode) lives in one JSON widget,

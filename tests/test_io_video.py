@@ -10,7 +10,7 @@ from lookfx_core.io.probe import probe
 from lookfx_core.io.reader import open_source
 from lookfx_core.io.writer import open_sink
 
-pytestmark = pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="ffmpeg not on PATH")
+pytestmark = pytest.mark.needs_ffmpeg   # skip / fail decided in tests/conftest.py
 
 N, H, W = 12, 64, 96
 

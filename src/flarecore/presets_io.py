@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# Modified for lookfx (see VENDORED.md); upstream: cyco-creates/Flarecore, Apache-2.0
 """Preset library: listing, loading, saving, and preview rendering.
 
 Upstream these were the helpers behind the ComfyUI routes in ``nodes/api.py``

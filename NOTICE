@@ -4,13 +4,17 @@ Copyright 2026 Rich K.
 This product bundles modified copies of two independently licensed works.
 Each keeps its original license file inside its package directory, and a
 VENDORED.md next to it lists the upstream source and every local change.
+Modified source files carry a "Modified for lookfx" line under their
+SPDX header.
 
-  src/flarecore/   Flarecore (comfyui-flarecore) v0.1.2b1
+  src/flarecore/                 Flarecore (comfyui-flarecore) v0.1.2b1
+  src/lookfx/web/vendor/flarecore/   (its browser editor, unmodified)
                    Copyright cyco.creates — Apache License 2.0
                    Modified for lookfx: ComfyUI node/server layer removed,
                    engine exposed as a library. See src/flarecore/VENDORED.md.
 
-  src/cmykmagic/   ComfyUI-CMYK-Magic v1.0.0
+  src/cmykmagic/                 ComfyUI-CMYK-Magic v1.0.0
+  src/lookfx/web/vendor/cmykmagic/   (its browser panel, unmodified)
                    Copyright 2026 Marc Solé — MIT License
                    Modified for lookfx: ComfyUI node/server layer removed,
                    engine exposed as a library. See src/cmykmagic/VENDORED.md.

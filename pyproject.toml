@@ -1,31 +1,57 @@
 [build-system]
-requires = ["setuptools>=68", "wheel"]
+# setuptools>=77 for the SPDX `license` expression and `license-files`
+requires = ["setuptools>=77", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "lookfx"
-version = "0.1.0"
+dynamic = ["version"]
 description = "Standalone stills+video FX app: procedural lens flares (Flarecore) and custom-ink halftone print looks (CMYK Magic)."
 readme = "README.md"
 requires-python = ">=3.10"
-license = { text = "Apache-2.0" }
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE", "src/flarecore/LICENSE", "src/cmykmagic/LICENSE"]
+authors = [{ name = "Rich K." }]
+keywords = ["lens-flare", "halftone", "video", "vfx", "torch", "ffmpeg"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Win32 (MS Windows)",
+    "Intended Audience :: End Users/Desktop",
+    "Operating System :: Microsoft :: Windows :: Windows 10",
+    "Operating System :: Microsoft :: Windows :: Windows 11",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Multimedia :: Graphics",
+    "Topic :: Multimedia :: Video",
+]
+# Compatible-release bounds; the exact tested set is in requirements-lock.txt
+# (setup.bat installs from it). torch comes from the cu128 index, not PyPI.
 dependencies = [
-    "torch",
-    "numpy",
-    "Pillow",
-    "fastapi",
-    "uvicorn",
+    "torch>=2.7,<3",
+    "numpy>=2,<3",
+    "Pillow>=10,<13",
+    "fastapi>=0.110,<1",
+    "uvicorn>=0.30,<1",
 ]
 
 [project.optional-dependencies]
-app = ["pywebview"]
-dev = ["pytest", "httpx"]
+app = ["pywebview>=5,<7", "pythonnet>=3.0; sys_platform == 'win32'"]
+dev = ["pytest>=8,<10", "httpx>=0.27,<1"]
+
+# The repository has no public remote yet. When it is published, add:
+# [project.urls]
+# Homepage = "https://github.com/<owner>/lookfx"
+# Changelog = "https://github.com/<owner>/lookfx/blob/master/CHANGELOG.md"
+# Issues = "https://github.com/<owner>/lookfx/issues"
 
 [project.scripts]
 lookfx = "lookfx.cli:main"
 
 [tool.setuptools]
 package-dir = { "" = "src" }
+
+[tool.setuptools.dynamic]
+version = { attr = "lookfx.__version__" }
 
 [tool.setuptools.packages.find]
 where = ["src"]
@@ -38,4 +64,8 @@ lookfx = ["web/**/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests", "src/flarecore/tests", "src/cmykmagic/tests"]
-addopts = "-q"
+# -rs: list skipped tests (ffmpeg-gated suites must not vanish silently)
+addopts = "-q -rs"
+markers = [
+    "needs_ffmpeg: test needs ffmpeg/ffprobe (skipped when missing; LOOKFX_REQUIRE_FFMPEG=1 makes it fail instead)",
+]

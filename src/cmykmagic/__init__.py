@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+# Modified for lookfx (see VENDORED.md); upstream: marcsole96/ComfyUI-CMYK-Magic, MIT
 """cmykmagic — custom-ink halftone / print-separation engine (lookfx fork of
 ComfyUI-CMYK-Magic, MIT). No ComfyUI dependency; see VENDORED.md.
 """
