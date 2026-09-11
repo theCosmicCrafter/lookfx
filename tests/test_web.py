@@ -88,7 +88,7 @@ def test_interpolations_into_innerhtml_are_escaped():
         assert "esc(" in body, fn
     # the row/card/settings templates: no raw document or server string lands in HTML
     for fn, raw in [("renderLayers", "${sub}"), ("renderRecent", "${r.path}"), ("refreshJobs", "${j.error}"),
-                    ("refreshJobs", "${out}"), ("renderSettings", "${v}")]:
+                    ("refreshJobs", "${out}"), ("refreshJobs", "${p}"), ("renderSettings", "${v}")]:
         assert raw not in _slice(APP_JS, fn), (fn, raw)
 
 
@@ -108,10 +108,91 @@ def test_aux_paths_strip_extension_not_dotted_folder():
 # --- correctness-6: the render dialog shows the extension the sink writes -------------
 
 def test_render_dialog_follows_the_codec():
-    assert "outputPathFor(" in _slice(APP_JS, "openRenderDialog")
+    assert "suggestRenderPath(" in _slice(APP_JS, "openRenderDialog")
+    assert "outputPathFor(" in _slice(APP_JS, "suggestRenderPath")
     assert "outputPathFor(" in _slice(APP_JS, "startRender")
-    assert re.search(r'\$\("#rd-codec"\)\.onchange = .*outputPathFor\(', APP_JS)
+    assert '$("#rd-codec").onchange = renderCodecChanged' in APP_JS
+    assert "outputPathFor(" in _slice(APP_JS, "renderCodecChanged")
     assert 'png_seq: ".png"' in PATHS_JS and 'png8_seq: ".png"' in PATHS_JS and 'tiff_seq: ".tif"' in PATHS_JS
+
+
+# --- output-ui: Settings -> Output, the suggested names, fps / HDR, the audio sidecar ---
+
+def test_output_settings_block_and_wiring():
+    m = re.search(r'<div class="sgroup" id="output-settings">(.*?)<div class="sgroup" id="limitations">', INDEX, re.S)
+    assert m, "output settings block"
+    block = m.group(1)
+    for rid, val in [("out-mode-source", "source"), ("out-mode-folder", "folder"), ("out-mode-project", "project"),
+                     ("out-pmode-source", "source"), ("out-pmode-folder", "folder")]:
+        assert re.search(rf'<input type="radio" name="out-p?mode" id="{rid}" value="{val}">', block), rid
+    for eid in ["out-folder", "out-folder-pick", "out-template", "out-template-reset", "out-example", "out-pfolder", "out-pfolder-pick"]:
+        assert f'id="{eid}"' in block, eid
+    # every token is documented inline, next to the field
+    for tok in ["{clip}", "{look}", "{ver}", "{date}", "{project}"]:
+        assert f"<code>{tok}</code>" in block, tok
+    # the prefs go through the shared blob (CONTRACT 3), folders default from /api/settings/defaults
+    assert 'prefs.get("output")' in _slice(APP_JS, "rawOutputPrefs")
+    assert 'prefs.set("output"' in _slice(APP_JS, "setOutputPref")
+    assert 'api("/api/settings/defaults")' in _slice(APP_JS, "loadOutputDefaults")
+    assert "await loadOutputDefaults()" in _slice(APP_JS, "boot")
+    boot = _slice(APP_JS, "boot")
+    for eid in ["out-folder", "out-pfolder", "out-template", "out-template-reset", "out-folder-pick", "out-pfolder-pick"]:
+        assert re.search(rf'\$\("#{eid}"\)\.on(change|input|click)', boot), eid
+    assert "host.pickFolder(" in boot
+    assert 'input[name=out-mode]' in boot and 'input[name=out-pmode]' in boot
+    assert "syncOutputSettings()" in _slice(APP_JS, "renderSettings")
+    assert "templateExample(" in _slice(APP_JS, "updateTemplateExample")
+    output_js = (WEB / "output.js").read_text(encoding="utf-8")
+    assert 'DEFAULT_TEMPLATE = "{clip}_{look}_v{ver}"' in output_js
+    assert re.search(r'mode: "source", folder: "", template: DEFAULT_TEMPLATE, project_mode: "source", project_folder: ""', output_js)
+
+
+def test_render_dialog_and_save_as_use_the_server_suggestion():
+    body = _slice(APP_JS, "suggestOutput")
+    assert 'post("/api/output/suggest"' in body
+    for key in ["project_id", "template", "mode", "folder", "ext", "kind"]:
+        assert f"{key}:" in body or f"{key}," in body or f"{key} }}" in body, key
+    assert 'kind === "project"' in body and "p.project_mode" in body and "p.project_folder" in body
+    assert "return null" in body                                     # 404 / older server -> the caller's fallback
+    rd = _slice(APP_JS, "suggestRenderPath")
+    assert 'suggestOutput("render", ext)' in rd and "suggestExt(" in rd
+    assert "_fx${" in rd                                             # today's <clip>_fx.<ext> fallback
+    assert "!== rdSuggest.path) return" in rd                         # an edited path is never overwritten
+    cc = _slice(APP_JS, "renderCodecChanged")
+    assert "extFamily(codec) !== rdSuggest.family" in cc and "suggestRenderPath(codec)" in cc
+    sp = _slice(APP_JS, "suggestProjectPath")
+    assert 'suggestOutput("project", ".lookfx.json")' in sp and ".lookfx.json`" in sp
+    assert "await suggestProjectPath()" in _slice(APP_JS, "saveProject")
+
+
+def test_source_header_fps_and_hdr_badge():
+    assert re.search(r'<label class="fps-ctl" id="src-fps-ctl" hidden[^>]*>.*<input id="src-fps" type="number"', INDEX)
+    assert re.search(r'<span id="src-hdr" class="tag mono" hidden[^>]*>HDR → SDR \(tone-mapped\)</span>', INDEX)
+    hdr = _slice(APP_JS, "syncSourceHeader")
+    assert 'm.kind !== "video"' in hdr and "!m.hdr" in hdr            # hidden for videos; badge when media.hdr (CONTRACT 1)
+    fps = _slice(APP_JS, "setInputFps")
+    assert "d.input.fps = v" in fps and "delete d.input.fps" in fps   # CONTRACT 2: input.fps float | absent
+    assert "put(`/api/project/${store.projectId}`" in fps and "waitJob(r.proxy_job)" in fps
+    assert '$("#src-fps").onchange' in _slice(APP_JS, "boot")
+    assert 'what === "input"' in APP_JS                               # an fps edit marks the project unsaved
+    assert "tone-mapped" in APP_JS.split("const preview = new PreviewLoop")[1].split("// ---")[0]
+    assert "syncSourceHeader()" in _slice(APP_JS, "refreshMedia") and "syncSourceHeader()" in _slice(APP_JS, "newProject")
+
+
+def test_queue_shows_the_aux_outputs():
+    body = _slice(APP_JS, "refreshJobs")
+    assert "j.result?.aux_outputs" in body and 'data-aux="${esc(k)}"' in body
+    assert re.search(r'const AUX_LABEL = \{ audio: "audio sidecar"', APP_JS)
+    assert ".job .aux" in APP_CSS
+
+
+def test_limitations_reworded_for_hdr_solve_reuse_and_sidecar():
+    m = re.search(r'<div class="sgroup" id="limitations">(.*?)</ul></div>', INDEX, re.S)
+    text = re.sub(r"<[^>]+>", "", m.group(1))
+    assert "tone-mapped to SDR on decode, not passed through" in text
+    assert "reuses the clip solve" in text and "only re-solves when none exists" in text
+    assert ".wav sidecar" in text
+    assert "treated as SDR" not in text and "re-solves the clip when the stored solve does not cover" not in text
 
 
 # --- critic-8 / critic-5: project commands and server-side UI settings ---------------

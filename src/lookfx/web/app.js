@@ -8,7 +8,8 @@ import { Timeline } from "./timeline.js";
 import { host } from "./host.js";
 import { dialog } from "./dialog.js";
 import { context as apiContext } from "./scripts/api.js";
-import { EXT_RX, stemOf, outputPathFor } from "./paths.js";
+import { EXT_RX, stemOf, outputPathFor, extFamily, suggestExt } from "./paths.js";
+import { DEFAULT_TEMPLATE, normaliseOutputPrefs, templateExample, hasVersionToken } from "./output.js";
 
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => Array.from(document.querySelectorAll(s));
@@ -28,9 +29,11 @@ const state = {
   previewImg: null,
   playing: null,
   settings: null,
+  outDefaults: null,     // GET /api/settings/defaults: {videos_dir, documents_dir}; {} on an older server
   jobsTimer: null,
   dirty: false,
 };
+const AUX_LABEL = { audio: "audio sidecar", flare_pass: "flare pass", plates: "ink plates" };
 
 // ---------------------------------------------------------------- helpers
 // Every server / document string that lands in innerHTML goes through this.
@@ -105,6 +108,46 @@ const prefs = {
     }, 150);
   },
 };
+
+// Output preferences (Settings -> Output): the "output" object of the prefs
+// blob, {mode, folder, template, project_mode, project_folder}. The stored
+// object keeps what the user typed ("" = default); outputPrefs() is the
+// resolved form the suggest requests and the Settings placeholders use, with
+// the empty folders filled from GET /api/settings/defaults.
+function rawOutputPrefs() {
+  let v = prefs.get("output");
+  try { if (typeof v === "string") v = JSON.parse(v); } catch { v = null; }
+  return v && typeof v === "object" && !Array.isArray(v) ? v : {};
+}
+function outputPrefs() { return normaliseOutputPrefs(rawOutputPrefs(), state.outDefaults || {}); }
+function setOutputPref(patch) {
+  const cur = rawOutputPrefs();
+  prefs.set("output", { mode: "source", folder: "", template: DEFAULT_TEMPLATE, project_mode: "source", project_folder: "", ...cur, ...patch });
+}
+async function loadOutputDefaults() {
+  if (state.outDefaults) return state.outDefaults;
+  try { state.outDefaults = await api("/api/settings/defaults"); }
+  catch { state.outDefaults = {}; }        // an older server: the folder fields simply have no default
+  return state.outDefaults;
+}
+// One POST /api/output/suggest: the next free name for the prefs, or null
+// when the server does not have the endpoint (an older build answers 404,
+// or 405 where the static mount catches the path) or cannot resolve the
+// folder; callers fall back to the pre-0.2 names.
+async function suggestOutput(kind, ext) {
+  if (!store.projectId) return null;
+  const p = outputPrefs();
+  const body = kind === "project"
+    ? { project_id: store.projectId, template: p.template, mode: p.project_mode, folder: p.project_folder, ext, kind }
+    : { project_id: store.projectId, template: p.template, mode: p.mode, folder: p.folder, ext, kind };
+  try {
+    const r = await post("/api/output/suggest", body);
+    return r && typeof r.path === "string" && r.path ? r : null;
+  } catch (e) {
+    if (!/^(404|405|Not Found|Method Not Allowed)$/.test(String(e.message))) console.warn("output suggestion unavailable", e);
+    return null;
+  }
+}
 
 function waitJob(id, onProgress) {
   return new Promise((resolve, reject) => {
@@ -213,13 +256,43 @@ async function refreshMedia() {
   $("#tl-fps").textContent = m.fps ? `${(+m.fps).toFixed(2)} fps` : "";
   $("#project-name").textContent = state.projectPath ? state.projectPath.split(/[\\/]/).pop() : (m.path ? m.path.split(/[\\/]/).pop() : "no project");
   $("#view-empty").hidden = !!m.frames;
+  syncSourceHeader();
   const depth = store.doc.aux?.depth?.path;
   $("#depth-name").textContent = depth ? depth.split(/[\\/]/).pop() : "none";
   $("#btn-depth-clear").hidden = !depth;
   syncRangeFromDoc();
   updateEnabled();
+  updateTemplateExample();
   preview.invalidate();
   preview.schedule();
+}
+// The fps field (stills and sequences only: a video's rate is intrinsic) and
+// the HDR badge (media.hdr: the decode tone-mapped it to SDR).
+function syncSourceHeader() {
+  const m = store.media || {};
+  const timed = !!m.frames && m.kind !== "video";
+  $("#src-fps-ctl").hidden = !timed;
+  $("#src-fps").value = timed && store.doc.input?.fps != null ? store.doc.input.fps : "";
+  $("#src-fps").placeholder = timed && m.fps ? String(+(+m.fps).toFixed(3)) : "24";
+  $("#src-hdr").hidden = !m.hdr;
+}
+// input.fps of a still / sequence (CONTRACT 2): the server re-decodes when
+// it changed, so the timeline and the render pick the new rate up.
+async function setInputFps(raw) {
+  if (!store.projectId || !store.media || store.media.kind === "video") return;
+  const text = String(raw ?? "").trim();
+  const v = text === "" ? null : Number(text);
+  if (v !== null && !(v > 0 && Number.isFinite(v))) { toast("fps must be a positive number (empty = 24)"); syncSourceHeader(); return; }
+  const cur = store.doc.input?.fps ?? null;
+  if (v === cur) return;
+  store.mutate((d) => { d.input = { ...d.input }; if (v == null) delete d.input.fps; else d.input.fps = v; }, "input");
+  status("re-timing clip…", "busy");
+  try {
+    const r = await put(`/api/project/${store.projectId}`, store.doc);
+    if (r.proxy_job) await waitJob(r.proxy_job);
+    await refreshMedia();
+    status(v == null ? "fps: default (24)" : `fps ${v}`);
+  } catch (e) { status(e.message, "error"); toast(`fps failed: ${e.message}`); }
 }
 async function pushProject() {
   if (!store.projectId) return;
@@ -231,8 +304,7 @@ async function saveProject(askPath = false) {
   if (!store.projectId) return;
   let path = askPath ? null : state.projectPath;
   if (!path) {
-    const base = state.projectPath ? stemOf(stemOf(state.projectPath)) : stemOf(store.media?.path || "project");
-    path = await host.saveFile(askPath ? "Save project as" : "Save project", `${base}.lookfx.json`);
+    path = await host.saveFile(askPath ? "Save project as" : "Save project", await suggestProjectPath());
     if (!path) return;
     if (!path.toLowerCase().endsWith(".json")) path += ".lookfx.json";
   }
@@ -247,6 +319,14 @@ async function saveProject(askPath = false) {
   } catch (e) { toast(`Save failed: ${e.message}`); }
 }
 const saveProjectAs = () => saveProject(true);
+// The name the save dialog opens with: the server's suggestion for the
+// project location prefs (CONTRACT 4, kind "project": the template with a
+// .lookfx.json extension in the chosen folder), else <clip>.lookfx.json.
+async function suggestProjectPath() {
+  const base = state.projectPath ? stemOf(stemOf(state.projectPath)) : stemOf(store.media?.path || "project");
+  const r = await suggestOutput("project", ".lookfx.json");
+  return r?.path || `${base}.lookfx.json`;
+}
 // A clip whose file moved: point input.path at the new location and keep
 // the chain, solves and settings; the server re-decodes it.
 async function relinkClip() {
@@ -285,6 +365,8 @@ async function newProject() {
   $("#project-name").textContent = "no project";
   $("#depth-name").textContent = "none"; $("#btn-depth-clear").hidden = true;
   $("#view-empty").hidden = false;
+  syncSourceHeader();
+  updateTemplateExample();
   setDirty(false);
   updateEnabled();
   showScreen("welcome");
@@ -472,7 +554,7 @@ function loadPlate() {
 
 const preview = new PreviewLoop({
   maxSize: 1024,
-  onBusy: (b) => { $("#view-badge").textContent = b ? "rendering…" : `preview ${store.frame} · ${state.view}`; },
+  onBusy: (b) => { $("#view-badge").textContent = b ? "rendering…" : `preview ${store.frame} · ${state.view}${store.media?.tonemapped ? " · tone-mapped" : ""}`; },
   onImage: (img) => {
     state.previewImg = img;
     const view = $("#view-img");
@@ -621,8 +703,7 @@ async function openRenderDialog() {
   const sel = $("#rd-codec"); sel.innerHTML = codecs.map((c) => `<option value="${esc(c)}">${esc(c)}</option>`).join("");
   const want = store.doc.output?.codec || (still ? "still" : "prores");
   sel.value = codecs.includes(want) ? want : codecs[0];
-  const base = stemOf(store.media.path || "output");
-  $("#rd-path").value = outputPathFor(store.doc.output?.path || `${base}_fx${still ? ".png" : ".mov"}`, sel.value);
+  suggestRenderPath(sel.value, true);
   $("#rd-start").value = timeline.inPoint; $("#rd-end").value = timeline.outFrame + 1;
   $("#rd-start").max = $("#rd-end").max = store.media.frames;
   $("#rd-chunk").value = store.doc.output?.chunk || 0;
@@ -630,6 +711,39 @@ async function openRenderDialog() {
   $("#rd-plates").checked = !!store.doc.output?.aux?.plates;
   $("#rd-audio").checked = (store.doc.output?.audio || "copy") === "copy";
   d.showModal();
+}
+// The output path the dialog proposes (CONTRACT 4): the server's suggestion
+// for the Settings -> Output prefs and the codec's extension, else the
+// pre-0.2 name (the project's last output path, or <clip>_fx.<ext>). The
+// fallback lands at once and the suggestion replaces it only while the field
+// still holds it — a path the user started editing is never overwritten. A
+// later request (codec change) or a closed dialog drops a stale answer.
+const rdSuggest = { seq: 0, path: null, family: null };
+async function suggestRenderPath(codec, opening = false) {
+  const my = ++rdSuggest.seq;
+  const still = store.media.kind === "still";
+  const typed = opening ? "" : $("#rd-path").value.trim();
+  const ext = suggestExt(codec, typed);
+  const fallback = outputPathFor(typed || store.doc.output?.path || `${stemOf(store.media.path || "output")}_fx${still ? ".png" : ".mov"}`, codec);
+  if (opening) { $("#rd-path").value = fallback; rdSuggest.path = fallback; }
+  rdSuggest.family = extFamily(codec);
+  const r = await suggestOutput("render", ext);
+  if (!r || my !== rdSuggest.seq || !$("#render-dialog").open) return;
+  if ($("#rd-path").value.trim() !== rdSuggest.path) return;     // edited meanwhile
+  rdSuggest.path = outputPathFor(r.path, codec);
+  $("#rd-path").value = rdSuggest.path;
+}
+// A codec change keeps the typed stem and swaps the extension; crossing
+// into another family (video <-> sequence <-> still) asks for a new
+// suggestion too, unless the path was edited by hand.
+function renderCodecChanged() {
+  const codec = $("#rd-codec").value;
+  const cur = $("#rd-path").value.trim();
+  const untouched = cur === rdSuggest.path;
+  $("#rd-path").value = outputPathFor(cur, codec);
+  if (untouched) rdSuggest.path = $("#rd-path").value;
+  if (untouched && extFamily(codec) !== rdSuggest.family) suggestRenderPath(codec);
+  else rdSuggest.family = extFamily(codec);
 }
 async function startRender() {
   const codec = $("#rd-codec").value;
@@ -667,7 +781,11 @@ async function refreshJobs() {
     const out = j.result?.output || "";
     const eta = j.eta_s != null ? `eta ${Math.floor(j.eta_s / 60)}:${String(Math.round(j.eta_s % 60)).padStart(2, "0")}` : "";
     const speed = j.result?.seconds ? `${(j.result.frames / j.result.seconds).toFixed(2)} fps` : "";
+    // extra files the render wrote next to the output: the flare pass, the
+    // ink plates, a sequence's audio sidecar (CONTRACT 5)
+    const aux = Object.entries(j.result?.aux_outputs || {}).filter(([, p]) => p);
     card.innerHTML = `<div class="head"><span class="name">${esc(j.kind)}</span><span class="dim">${esc(out || j.stage || "")}</span><div class="grow"></div><span class="state">${esc(j.state)}${j.error ? " · " + esc(j.error) : ""}</span></div>
+      ${aux.map(([k, p]) => `<div class="aux" data-aux="${esc(k)}"><span>${esc(AUX_LABEL[k] || k)}</span><span class="path" title="${esc(p)}">${esc(p)}</span></div>`).join("")}
       <div class="bar"><div style="width:${Math.max(0, Math.min(100, pct))}%"></div></div>
       <div class="meta"><span>${esc(j.stage || "")} ${+j.done || 0} / ${+j.total || 0}</span><span>${esc(speed)}</span><span>${esc(eta)}</span><div class="grow"></div>
         ${j.state === "running" || j.state === "queued" ? `<button class="mini" data-cancel>Cancel</button>` : ""}
@@ -710,6 +828,31 @@ async function renderSettings() {
   // ffmpeg is only otherwise discovered by the first failed open
   $("#ffmpeg-banner").hidden = !!s.ffmpeg;
   if (!s.ffmpeg) status("ffmpeg / ffprobe not found — clips cannot be opened until it is installed", "error");
+  syncOutputSettings();
+}
+// Settings -> Output from the prefs: the radios, the folder fields (what the
+// user typed; the resolved default as placeholder) and the template.
+function syncOutputSettings() {
+  const p = outputPrefs(), raw = rawOutputPrefs();
+  $$("input[name=out-mode]").forEach((r) => { r.checked = r.value === p.mode; });
+  $$("input[name=out-pmode]").forEach((r) => { r.checked = r.value === p.project_mode; });
+  $("#out-folder").value = typeof raw.folder === "string" ? raw.folder : "";
+  $("#out-folder").placeholder = p.folder || "folder for renders";
+  $("#out-folder").disabled = $("#out-folder-pick").disabled = p.mode !== "folder";
+  $("#out-pfolder").value = typeof raw.project_folder === "string" ? raw.project_folder : "";
+  $("#out-pfolder").placeholder = p.project_folder || "folder for projects";
+  $("#out-pfolder").disabled = $("#out-pfolder-pick").disabled = p.project_mode !== "folder";
+  if (document.activeElement !== $("#out-template")) $("#out-template").value = p.template;
+  updateTemplateExample();
+}
+// The live example under the template field, from the open clip / chain /
+// project when there is one.
+function updateTemplateExample() {
+  const t = $("#out-template").value.trim() || DEFAULT_TEMPLATE;
+  const ext = store.media?.kind === "still" ? ".png" : ".mov";
+  let text = `example: ${templateExample(t, { media: store.media, chain: store.doc.chain, projectPath: state.projectPath, ext })}`;
+  if (!hasVersionToken(t)) text += " — no {ver}: every render proposes the same name";
+  $("#out-example").textContent = text;
 }
 
 // ---------------------------------------------------------------- store wiring
@@ -719,10 +862,10 @@ store.subscribe(async (what, detail) => {
     if (detail?.history) setDirty(true);
     preview.invalidate(); preview.schedule();
   }
-  if (what === "stack") { await ensureNodes(); renderLayers(); updateLanes(); setDirty(true); preview.schedule(); pushProject(); }
+  if (what === "stack") { await ensureNodes(); renderLayers(); updateLanes(); setDirty(true); preview.schedule(); pushProject(); updateTemplateExample(); }
   if (what === "select") { renderLayers(); showSelectedNode(); }
   if (what === "params") { renderLayers(); updateTools(); setDirty(true); preview.schedule(); }
-  if (what === "output" || what === "aux") { setDirty(true); }
+  if (what === "output" || what === "aux" || what === "input") { setDirty(true); }
   if (what === "frame") {
     $("#tl-frame").textContent = store.frame;
     apiContext.frame = store.frame;
@@ -740,6 +883,7 @@ async function boot() {
   catch { setTheme("dense"); setAccent("amber"); }
   const effects = await api("/api/effects");
   for (const e of effects) state.schemas[e.id] = await api(`/api/effects/${encodeURIComponent(e.id)}/schema`);
+  await loadOutputDefaults();
   await renderSettings();
   renderRecent();
   updateEnabled();
@@ -768,10 +912,20 @@ async function boot() {
   $("#btn-new-welcome").onclick = newProject;
   $("#btn-render").onclick = openRenderDialog;
   $("#rd-cancel").onclick = () => $("#render-dialog").close();
-  $("#rd-codec").onchange = () => { $("#rd-path").value = outputPathFor($("#rd-path").value.trim(), $("#rd-codec").value); };
+  $("#rd-codec").onchange = renderCodecChanged;
   $("#rd-go").onclick = startRender;
   $("#rd-browse").onclick = async () => { const p = await host.saveFile("Render to", $("#rd-path").value); if (p) $("#rd-path").value = p; };
   $("#btn-queue-refresh").onclick = refreshJobs;
+  $("#src-fps").onchange = (e) => setInputFps(e.target.value);
+  // Settings -> Output
+  $$("input[name=out-mode]").forEach((r) => { r.onchange = () => { if (r.checked) { setOutputPref({ mode: r.value }); syncOutputSettings(); } }; });
+  $$("input[name=out-pmode]").forEach((r) => { r.onchange = () => { if (r.checked) { setOutputPref({ project_mode: r.value }); syncOutputSettings(); } }; });
+  $("#out-folder").onchange = (e) => { setOutputPref({ folder: e.target.value.trim() }); syncOutputSettings(); };
+  $("#out-pfolder").onchange = (e) => { setOutputPref({ project_folder: e.target.value.trim() }); syncOutputSettings(); };
+  $("#out-folder-pick").onclick = async () => { const p = await host.pickFolder("Render folder"); if (p) { setOutputPref({ folder: p }); syncOutputSettings(); } };
+  $("#out-pfolder-pick").onclick = async () => { const p = await host.pickFolder("Project folder"); if (p) { setOutputPref({ project_folder: p }); syncOutputSettings(); } };
+  $("#out-template").oninput = (e) => { setOutputPref({ template: e.target.value.trim() || DEFAULT_TEMPLATE }); updateTemplateExample(); };
+  $("#out-template-reset").onclick = () => { setOutputPref({ template: DEFAULT_TEMPLATE }); syncOutputSettings(); };
   $("#tp-first").onclick = () => store.setFrame(0);
   $("#tp-last").onclick = () => store.setFrame(1e9);
   $("#tp-prev").onclick = () => stepFrame(-1);
