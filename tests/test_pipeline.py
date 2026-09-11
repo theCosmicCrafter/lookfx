@@ -1,6 +1,5 @@
 """run_project: analysis + chunked render, chunk invariance, aux IO, cancel."""
 
-import shutil
 import subprocess
 import threading
 from fractions import Fraction

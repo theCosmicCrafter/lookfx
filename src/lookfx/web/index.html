@@ -54,6 +54,7 @@
         <div class="actions">
           <button class="primary" id="btn-open-media">Open clip or image…</button>
           <button id="btn-open-project">Open project…</button>
+          <button id="btn-new-welcome" title="Close the current clip and start empty">New project</button>
         </div>
         <div id="ffmpeg-banner" class="banner" hidden><b>ffmpeg / ffprobe not found.</b> LookFX decodes and encodes every clip with ffmpeg. Install it and restart: <code>winget install Gyan.FFmpeg</code> (or set <code>LOOKFX_FFMPEG</code> / <code>LOOKFX_FFPROBE</code> to the executables).</div>
         <div id="recent" class="recent"></div>
@@ -76,9 +77,13 @@
         <button id="btn-solve" title="Solve the whole clip for the selected flare layer (tracking, occlusion, visibility)">Solve clip</button>
         <span id="solve-status" class="mono dim"></span>
         <span class="vsep"></span>
+        <button id="btn-new" title="New project (Ctrl+N)">New</button>
+        <button id="btn-relink" title="Point the project at a moved or renamed clip; layers and solves are kept">Relink clip…</button>
+        <span class="vsep"></span>
         <button id="btn-undo" title="Undo (Ctrl+Z)">↶</button>
         <button id="btn-redo" title="Redo (Ctrl+Shift+Z)">↷</button>
         <button id="btn-save" title="Save project (Ctrl+S)">Save</button>
+        <button id="btn-save-as" title="Save the project under a new name (Ctrl+Shift+S)">Save as…</button>
         <button id="btn-render" class="primary">Render…</button>
       </div>
 
@@ -171,6 +176,16 @@
           <div class="h1">Settings</div>
           <div class="dim lead">Compute, tools and where your files live.</div>
           <div id="settings-groups"></div>
+          <div class="sgroup" id="limitations">
+            <span class="label">Limitations</span>
+            <div class="box"><ul class="limits">
+              <li><b>SDR only.</b> Frames are processed as 16-bit sRGB; HDR (PQ / HLG, BT.2020) clips are treated as SDR and every output is tagged BT.709.</li>
+              <li><b>EXR is input-only</b> (decoded to sRGB). Outputs are PNG / TIFF / JPEG stills, PNG / TIFF sequences or video. Stills and sequences play at 24 fps unless the project sets an input frame rate.</li>
+              <li><b>Audio is copied, not processed.</b> A ranged render keeps the matching slice of the audio; it is re-encoded (AAC / PCM) when the range does not start at 0 or the codec does not fit the container.</li>
+              <li><b>One clip per project</b>, with media paths stored absolute; use <i>Relink clip</i> when a file moves. A project opened next to its media resolves a missing path relative to the project file.</li>
+              <li><b>Windows desktop shell only</b>; the browser UI (<code>lookfx serve</code>) is the cross-platform path.</li>
+            </ul></div>
+          </div>
         </div>
       </div>
     </section>

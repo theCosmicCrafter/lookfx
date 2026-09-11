@@ -8,15 +8,22 @@ Modified source files carry a "Modified for lookfx" line under their
 SPDX header.
 
   src/flarecore/                 Flarecore (comfyui-flarecore) v0.1.2b1
-  src/lookfx/web/vendor/flarecore/   (its browser editor, unmodified)
+  src/lookfx/web/vendor/flarecore/   (its browser editor; lookfx edits marked "// lookfx:" inline)
                    Copyright cyco.creates — Apache License 2.0
                    Modified for lookfx: ComfyUI node/server layer removed,
                    engine exposed as a library. See src/flarecore/VENDORED.md.
 
   src/cmykmagic/                 ComfyUI-CMYK-Magic v1.0.0
-  src/lookfx/web/vendor/cmykmagic/   (its browser panel, unmodified)
+  src/lookfx/web/vendor/cmykmagic/   (its browser panel; lookfx edits marked "// lookfx:" inline)
                    Copyright 2026 Marc Solé — MIT License
                    Modified for lookfx: ComfyUI node/server layer removed,
                    engine exposed as a library. See src/cmykmagic/VENDORED.md.
+
+The web UI ships the IBM Plex fonts (src/lookfx/web/fonts/):
+
+  IBM Plex Sans and IBM Plex Mono
+                   Copyright 2017 IBM Corp. All rights reserved.
+                   Licensed under the SIL Open Font License, Version 1.1
+                   (full text in src/lookfx/web/fonts/OFL.txt).
 
 ffmpeg is invoked as a separate external process and is not bundled.

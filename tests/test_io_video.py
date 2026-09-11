@@ -1,6 +1,5 @@
 """ffmpeg-backed IO: probe, write, read, ranges, sequences, stills."""
 
-import shutil
 import subprocess
 import threading
 from fractions import Fraction

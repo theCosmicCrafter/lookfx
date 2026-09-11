@@ -13,4 +13,4 @@
 - `cmyk_magic.py` -> `settings.py` (node class removed; `_parse_cfg` accepts a dict; `run_resolved(..., device=...)`). `params.py`: `PRINT_PARAMS` from the original `INPUT_TYPES`.
 - `preview.py`: node-id input cache removed; `render_png(source, ...)` takes the source frame; `thumbnail()` added.
 - `effect.py`: `PrintLookEffect`; `tests/test_smoke.py` added (upstream had no tests).
-- The web panel (`cmyk_magic.js`) runs unmodified in the app from `lookfx/web/vendor/cmykmagic/` via shims.
+- The web panel (`cmyk_magic.js`) runs in the app from `lookfx/web/vendor/cmykmagic/` via shims; it carries an SPDX / provenance header and the few lines lookfx changed (layout class hooks, in-app dialogs) are marked `// lookfx:` inline.

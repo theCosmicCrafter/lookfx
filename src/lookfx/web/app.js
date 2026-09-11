@@ -8,6 +8,7 @@ import { Timeline } from "./timeline.js";
 import { host } from "./host.js";
 import { dialog } from "./dialog.js";
 import { context as apiContext } from "./scripts/api.js";
+import { EXT_RX, stemOf, outputPathFor } from "./paths.js";
 
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => Array.from(document.querySelectorAll(s));
@@ -36,9 +37,6 @@ const state = {
 export function esc(v) {
   return String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
-// Strip the extension of a path without mistaking a dotted folder for one.
-const EXT_RX = /\.[^.\\/]+$/;
-const stemOf = (p) => p.replace(EXT_RX, "");
 
 async function api(path, opts) {
   const res = await fetch(path, opts);
@@ -72,21 +70,39 @@ async function confirmDiscard() {
   return dialog.confirm("The current project has unsaved changes. Discard them?", { title: "Unsaved changes", okLabel: "Discard" });
 }
 
-// Preferences (theme, accent, recent files) live in localStorage, which is
-// per origin — and the server picks a free port per launch. A cookie is
-// scoped by host, not port, so it carries them across launches; localStorage
-// is the fallback when cookies are off.
+// Preferences (theme, accent, recent files) are a JSON blob the server keeps
+// in the user dir (GET/PUT /api/settings/ui), so they follow the install, not
+// the port the server happened to pick. localStorage mirrors them for a
+// server without the endpoint (404) or one that is briefly unreachable; the
+// blob is loaded once at boot and written whole after each change.
 const prefs = {
-  get(key) {
+  data: {},
+  remote: null,          // true once the endpoint answered, false after a 404
+  _local(key) { try { return localStorage.getItem(`lookfx.${key}`); } catch { return null; } },
+  async load() {
     try {
-      const m = document.cookie.match(new RegExp(`(?:^|; )lookfx_${key}=([^;]*)`));
-      if (m) return decodeURIComponent(m[1]);
-    } catch { /* */ }
-    try { return localStorage.getItem(`lookfx.${key}`); } catch { return null; }
+      const r = await fetch("/api/settings/ui");
+      if (r.status === 404) { this.remote = false; return; }
+      if (!r.ok) throw new Error(String(r.status));
+      const j = await r.json();
+      this.data = j && typeof j === "object" && !Array.isArray(j) ? j : {};
+      this.remote = true;
+    } catch (e) { console.warn("ui settings unavailable, using this browser's copy", e); }
+  },
+  // Values are whatever JSON the caller stored (strings for theme / accent, an
+  // array for recent); the localStorage copy is always a string.
+  get(key) {
+    if (key in this.data) return this.data[key] ?? null;
+    return this._local(key);
   },
   set(key, value) {
-    try { document.cookie = `lookfx_${key}=${encodeURIComponent(value)}; path=/; max-age=31536000; SameSite=Strict`; } catch { /* */ }
-    try { localStorage.setItem(`lookfx.${key}`, value); } catch { /* */ }
+    this.data[key] = value;
+    try { localStorage.setItem(`lookfx.${key}`, typeof value === "string" ? value : JSON.stringify(value)); } catch { /* */ }
+    if (this.remote === false) return;
+    clearTimeout(this._timer);
+    this._timer = setTimeout(() => {
+      put("/api/settings/ui", this.data).catch((e) => { if (String(e.message) === "404") this.remote = false; else console.warn("ui settings not saved", e); });
+    }, 150);
   },
 };
 
@@ -143,7 +159,7 @@ function updateTools() {
 // would be replaced by the server's default document on the first open.
 function updateEnabled() {
   const on = !!store.projectId;
-  for (const id of ["#btn-add-flare", "#btn-add-print", "#btn-depth", "#btn-solve", "#btn-render", "#btn-save", "#tp-in", "#tp-out"]) $(id).disabled = !on;
+  for (const id of ["#btn-add-flare", "#btn-add-print", "#btn-depth", "#btn-solve", "#btn-render", "#btn-save", "#btn-save-as", "#btn-relink", "#tp-in", "#tp-out"]) $(id).disabled = !on;
   $("#params-empty").textContent = on ? "Select a layer" : "Open a clip to start";
 }
 
@@ -209,18 +225,20 @@ async function pushProject() {
   if (!store.projectId) return;
   try { await put(`/api/project/${store.projectId}`, store.doc); } catch (e) { toast(e.message); }
 }
-async function saveProject() {
+// Save writes to the project's own path; Save As always asks. The server
+// writes through a temp file and keeps one .bak (see /api/project/{pid}/save).
+async function saveProject(askPath = false) {
   if (!store.projectId) return;
-  let path = state.projectPath;
+  let path = askPath ? null : state.projectPath;
   if (!path) {
-    const base = stemOf(store.media?.path || "project");
-    path = await host.saveFile("Save project", `${base}.lookfx.json`);
+    const base = state.projectPath ? stemOf(stemOf(state.projectPath)) : stemOf(store.media?.path || "project");
+    path = await host.saveFile(askPath ? "Save project as" : "Save project", `${base}.lookfx.json`);
     if (!path) return;
     if (!path.toLowerCase().endsWith(".json")) path += ".lookfx.json";
   }
   try {
     await pushProject();
-    await post(`/api/project/${store.projectId}/save`, { path });
+    await post(`/api/project/${store.projectId}/save`, { path, backup: true });
     state.projectPath = path;
     $("#project-name").textContent = path.split(/[\\/]/).pop();
     remember(path, "project");
@@ -228,19 +246,68 @@ async function saveProject() {
     toast("Project saved", true);
   } catch (e) { toast(`Save failed: ${e.message}`); }
 }
+const saveProjectAs = () => saveProject(true);
+// A clip whose file moved: point input.path at the new location and keep
+// the chain, solves and settings; the server re-decodes it.
+async function relinkClip() {
+  if (!store.projectId) return;
+  const cur = store.media?.path || store.doc.input?.path || "";
+  const p = await host.pickFile(cur ? `Relink ${cur.split(/[\\/]/).pop()}` : "Relink clip");
+  if (!p) return;
+  status("relinking clip…", "busy");
+  try {
+    await pushProject();
+    const r = await post(`/api/project/${store.projectId}/relink`, { path: p });
+    if (r.project) store.doc.input = r.project.input;
+    else store.doc.input = { ...store.doc.input, path: p };
+    if (r.proxy_job) await waitJob(r.proxy_job);
+    await refreshMedia();
+    setDirty(true);
+    status(`relinked to ${p}`);
+  } catch (e) {
+    status(e.message, "error");
+    toast(e.message === "404" ? "Relink is not available in this server build" : `Relink failed: ${e.message}`);
+  }
+}
+// Back to the welcome screen with an empty document; the open session is
+// closed so its clip cache goes away.
+async function newProject() {
+  if (!(await confirmDiscard())) return;
+  const pid = store.projectId;
+  store.load({ schema_version: 1, app: {}, input: { path: "", range: [0, null] }, aux: {}, output: {}, chain: [] }, null);
+  apiContext.projectId = null;
+  store.media = null; store.solves = {};
+  state.projectPath = null;
+  state.previewImg = null;
+  $("#view-img").removeAttribute("src");
+  $("#src-name").textContent = "—"; $("#src-meta").textContent = "";
+  $("#tl-total").textContent = "/ 0"; $("#tl-fps").textContent = ""; $("#tl-range").textContent = "";
+  $("#project-name").textContent = "no project";
+  $("#depth-name").textContent = "none"; $("#btn-depth-clear").hidden = true;
+  $("#view-empty").hidden = false;
+  setDirty(false);
+  updateEnabled();
+  showScreen("welcome");
+  status("ready");
+  if (pid) api(`/api/project/${pid}`, { method: "DELETE" }).catch(() => { /* already gone */ });
+}
 
+function recentList() {
+  let v = prefs.get("recent");
+  try { if (typeof v === "string") v = JSON.parse(v); } catch { v = []; }
+  return Array.isArray(v) ? v : [];
+}
 function remember(path, kind) {
   try {
-    const list = JSON.parse(prefs.get("recent") || "[]").filter((r) => r.path !== path);
+    const list = recentList().filter((r) => r.path !== path);
     list.unshift({ path, kind, when: Date.now() });
-    prefs.set("recent", JSON.stringify(list.slice(0, 8)));
+    prefs.set("recent", list.slice(0, 8));
   } catch { /* */ }
   renderRecent();
 }
 function renderRecent() {
   const el = $("#recent"); el.innerHTML = "";
-  let list = [];
-  try { list = JSON.parse(prefs.get("recent") || "[]"); } catch { /* */ }
+  const list = recentList();
   if (!list.length) return;
   const head = document.createElement("div"); head.className = "label"; head.style.padding = "12px 0 4px"; head.textContent = "Recent";
   el.appendChild(head);
@@ -555,7 +622,7 @@ async function openRenderDialog() {
   const want = store.doc.output?.codec || (still ? "still" : "prores");
   sel.value = codecs.includes(want) ? want : codecs[0];
   const base = stemOf(store.media.path || "output");
-  $("#rd-path").value = store.doc.output?.path || `${base}_fx${still ? ".png" : ".mov"}`;
+  $("#rd-path").value = outputPathFor(store.doc.output?.path || `${base}_fx${still ? ".png" : ".mov"}`, sel.value);
   $("#rd-start").value = timeline.inPoint; $("#rd-end").value = timeline.outFrame + 1;
   $("#rd-start").max = $("#rd-end").max = store.media.frames;
   $("#rd-chunk").value = store.doc.output?.chunk || 0;
@@ -565,9 +632,9 @@ async function openRenderDialog() {
   d.showModal();
 }
 async function startRender() {
-  const path = $("#rd-path").value.trim();
-  if (!path) { toast("Output path is empty"); return; }
   const codec = $("#rd-codec").value;
+  const path = outputPathFor($("#rd-path").value.trim(), codec);
+  if (!path) { toast("Output path is empty"); return; }
   const out = { path, codec, chunk: +$("#rd-chunk").value || 0, audio: $("#rd-audio").checked ? "copy" : "none", aux: {} };
   const stem = stemOf(path), ext = codec.endsWith("_seq") ? "" : (path.match(EXT_RX)?.[0] || ".mov");
   if ($("#rd-pass").checked) out.aux.flare_pass = `${stem}_pass${ext}`;
@@ -668,6 +735,7 @@ store.subscribe(async (what, detail) => {
 
 // ---------------------------------------------------------------- boot
 async function boot() {
+  await prefs.load();
   try { setTheme(prefs.get("theme") || "dense"); setAccent(prefs.get("accent") || "amber"); }
   catch { setTheme("dense"); setAccent("amber"); }
   const effects = await api("/api/effects");
@@ -693,9 +761,14 @@ async function boot() {
   $("#btn-solve").onclick = solveSelected;
   $("#btn-undo").onclick = () => store.undo();
   $("#btn-redo").onclick = () => store.redo();
-  $("#btn-save").onclick = saveProject;
+  $("#btn-save").onclick = () => saveProject();
+  $("#btn-save-as").onclick = saveProjectAs;
+  $("#btn-relink").onclick = relinkClip;
+  $("#btn-new").onclick = newProject;
+  $("#btn-new-welcome").onclick = newProject;
   $("#btn-render").onclick = openRenderDialog;
   $("#rd-cancel").onclick = () => $("#render-dialog").close();
+  $("#rd-codec").onchange = () => { $("#rd-path").value = outputPathFor($("#rd-path").value.trim(), $("#rd-codec").value); };
   $("#rd-go").onclick = startRender;
   $("#rd-browse").onclick = async () => { const p = await host.saveFile("Render to", $("#rd-path").value); if (p) $("#rd-path").value = p; };
   $("#btn-queue-refresh").onclick = refreshJobs;
@@ -725,7 +798,8 @@ async function boot() {
     const mod = e.ctrlKey || e.metaKey;
     if (mod && e.key.toLowerCase() === "z") { e.preventDefault(); e.shiftKey ? store.redo() : store.undo(); return; }
     if (mod && e.key.toLowerCase() === "y") { e.preventDefault(); store.redo(); return; }
-    if (mod && e.key.toLowerCase() === "s") { e.preventDefault(); saveProject(); return; }
+    if (mod && e.key.toLowerCase() === "s") { e.preventDefault(); e.shiftKey ? saveProjectAs() : saveProject(); return; }
+    if (mod && e.key.toLowerCase() === "n") { e.preventDefault(); newProject(); return; }
     if (mod || t.closest?.("#params, dialog, button, summary")) return;
     if (e.key === "ArrowLeft") { e.preventDefault(); stepFrame(e.shiftKey ? -10 : -1); }
     if (e.key === "ArrowRight") { e.preventDefault(); stepFrame(e.shiftKey ? 10 : 1); }
@@ -737,7 +811,7 @@ async function boot() {
   });
   window.addEventListener("beforeunload", (e) => { if (state.dirty) { e.preventDefault(); e.returnValue = ""; } });
 
-  window.lookfx = { store, openMedia, openProject, preview, timeline, state, esc };   // debugging / launcher hooks
+  window.lookfx = { store, openMedia, openProject, newProject, relinkClip, saveProject, saveProjectAs, preview, timeline, state, prefs, esc };   // debugging / launcher hooks
   const q = new URLSearchParams(location.search);
   if (q.get("open")) {
     const p = q.get("open");

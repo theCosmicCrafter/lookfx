@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Vendored from marcsole96/ComfyUI-CMYK-Magic v1.0.0 (MIT, Copyright 2026 Marc Sole); the few lookfx edits are marked "// lookfx:" inline. See src/cmykmagic/VENDORED.md
 import { app } from "../../scripts/app.js";
 import { api } from "../../scripts/api.js";
 

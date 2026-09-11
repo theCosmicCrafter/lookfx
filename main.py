@@ -63,6 +63,21 @@ def setup_logging() -> Path | None:
     return path
 
 
+def file_dialog_kind(name: str):
+    """pywebview's dialog-type constant: ``FileDialog.<name>`` (pywebview 5.1+), else the
+    deprecated ``<name>_DIALOG`` module constant, else its documented integer value."""
+    import webview
+    enum = getattr(webview, "FileDialog", None)
+    if enum is not None and hasattr(enum, name):
+        return getattr(enum, name)
+    return getattr(webview, f"{name}_DIALOG", {"OPEN": 10, "FOLDER": 20, "SAVE": 30}[name])
+
+
+# The page asks "are there unsaved changes?" answers this way; kept in one place
+# so the launcher tests and the closing hook agree.
+DIRTY_JS = "!!(window.lookfx && window.lookfx.state.dirty)"
+
+
 class HostApi:
     """Native services exposed to the page as ``window.pywebview.api``."""
 
@@ -70,19 +85,16 @@ class HostApi:
         self.window = None
 
     def pick_file(self, title="Open", filters=None):
-        import webview
-        res = self.window.create_file_dialog(webview.OPEN_DIALOG, allow_multiple=False,
+        res = self.window.create_file_dialog(file_dialog_kind("OPEN"), allow_multiple=False,
                                              file_types=tuple(filters or ("All files (*.*)",)))
         return res[0] if res else None
 
     def pick_folder(self, title="Choose folder"):
-        import webview
-        res = self.window.create_file_dialog(webview.FOLDER_DIALOG)
+        res = self.window.create_file_dialog(file_dialog_kind("FOLDER"))
         return res[0] if res else None
 
     def save_file(self, title="Save as", default_name="output.mov"):
-        import webview
-        res = self.window.create_file_dialog(webview.SAVE_DIALOG, save_filename=default_name)
+        res = self.window.create_file_dialog(file_dialog_kind("SAVE"), save_filename=default_name)
         return (res[0] if isinstance(res, (list, tuple)) else res) or None
 
     def open_path(self, path):
@@ -191,6 +203,70 @@ def webview_usable() -> tuple[bool, str | None]:
     return True, None
 
 
+class CloseGuard:
+    """Decides whether the window may close: unsaved changes in the page and running
+    jobs each get a native confirm.
+
+    pywebview runs ``closing`` handlers on the UI thread, and on WinForms
+    ``evaluate_js`` waits for a continuation that needs that same thread — asking the
+    page from inside the handler would deadlock. So the first close request is
+    cancelled and answered on a worker thread; when the user agrees the window is
+    destroyed with ``force`` set, which the handler then lets through. The server is
+    stopped by ``main()`` once ``webview.start`` returns."""
+
+    def __init__(self, window, handle: ServerHandle):
+        self.window, self.handle = window, handle
+        self.force = False
+        self._lock = threading.Lock()
+        self._pending = False
+
+    def on_closing(self) -> bool:
+        if self.force:
+            return True
+        with self._lock:
+            if self._pending:                     # a decision is already being made
+                return False
+            self._pending = True
+        threading.Thread(target=self._decide, name="lookfx-close", daemon=True).start()
+        return False
+
+    def page_dirty(self) -> bool:
+        try:
+            return bool(self.window.evaluate_js(DIRTY_JS))
+        except Exception:  # noqa: BLE001 — a page that cannot answer has nothing to lose
+            log.exception("could not ask the page about unsaved changes")
+            return False
+
+    def busy_jobs(self) -> list:
+        jobs = self.handle.app.state.jobs
+        return [j for j in jobs.jobs.values() if j.state in ("queued", "running")]
+
+    def confirm_close(self) -> bool:
+        """True when the app may quit: unsaved changes first, then running jobs."""
+        if self.page_dirty() and not self.window.create_confirmation_dialog(
+                "LookFX", "The project has unsaved changes. Quit and discard them?"):
+            return False
+        busy = self.busy_jobs()
+        if busy:
+            what = ", ".join(sorted({j.kind for j in busy}))
+            if not self.window.create_confirmation_dialog(
+                    "LookFX", f"{len(busy)} job(s) still running ({what}). Quit and cancel them?"):
+                return False
+        return True
+
+    def _decide(self) -> None:
+        try:
+            ok = self.confirm_close()
+        except Exception:  # noqa: BLE001 — never trap the user in a window that cannot close
+            log.exception("close confirmation failed; closing")
+            ok = True
+        if ok:
+            self.force = True
+            self.window.destroy()
+        with self._lock:
+            self._pending = False
+
+
 def main(argv=None) -> int:
     argv = sys.argv[1:] if argv is None else argv
     log_path = setup_logging()
@@ -226,22 +302,12 @@ def main(argv=None) -> int:
     host = HostApi()
     host.window = webview.create_window("LookFX", url, width=1600, height=960, min_size=(1100, 700),
                                         js_api=host, background_color="#0c0d0f")
-
-    def on_closing():
-        jobs = handle.app.state.jobs
-        busy = [j for j in jobs.jobs.values() if j.state in ("queued", "running")]
-        if busy:
-            what = ", ".join(sorted({j.kind for j in busy}))
-            if not host.window.create_confirmation_dialog(
-                    "LookFX", f"{len(busy)} job(s) still running ({what}). Quit and cancel them?"):
-                return False                      # keep the window open
-        handle.stop()
-        return True
-    host.window.events.closing += on_closing
+    guard = CloseGuard(host.window, handle)
+    host.window.events.closing += guard.on_closing
     try:
         webview.start(private_mode=False)
     finally:
-        if not handle.server.should_exit:         # window died without the closing event
+        if not handle.server.should_exit:         # cancels jobs, closes sessions, stops uvicorn
             handle.stop()
     log.info("exit")
     return 0

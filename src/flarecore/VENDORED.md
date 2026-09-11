@@ -14,4 +14,5 @@
 - `params.py`: `RENDER_PARAMS` built from the original `INPUT_TYPES` dict (`preset_json` -> `preset`, a JSON object).
 - `effect.py`: `FlareEffect` for the lookfx chain. `__init__.py` rewritten (no re-exec trick, no routes).
 - Tests: ComfyUI-only tests removed (`test_workflows.py`, `test_node_family.py`, registration/generator-select/cache-invalidation tests); `tests/compat.py` provides the old node surface for the rest.
-- The web editor (`web/*.js`) runs unmodified in the app from `lookfx/web/vendor/flarecore/` via shims.
+- `render.py`: `analyze_lights` takes `depth` as a tensor or a `(start, stop)` slice reader plus `depth_frames`, so a clip-wide solve never holds the whole depth clip in memory. `groups.py`: `group_options()` and `render_groups(group_lights=...)` for per-group whole-clip solves. `effect.py`: `FlareEffect.analyze` solves every enabled group of a scene preset. `effect.py`, `render.py`, `groups.py` and `tracking.py` carry a `# Modified for lookfx (see VENDORED.md)` marker under their SPDX header.
+- The web editor (`web/*.js`) runs in the app from `lookfx/web/vendor/flarecore/` via shims; the few lines lookfx changed in `flarecore_ui.js` (in-app dialogs, hosted-picker drawing) are marked `// lookfx:` inline.
