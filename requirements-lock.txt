@@ -36,7 +36,7 @@ Pygments==2.21.0
 pytest==9.1.1
 pythonnet==3.1.0
 pywebview==6.2.1
-setuptools==78.1.0
+setuptools==81.0.0
 starlette==1.6.0
 sympy==1.14.0
 torch==2.11.0+cu128

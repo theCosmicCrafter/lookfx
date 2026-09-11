@@ -173,6 +173,21 @@ The Settings screen lists the same points.
 - **A ranged render reuses a covering solve** (the session's whole-clip solve sliced to the range) and re-solves only when no fresh solve covers it.
 - The desktop shell is tested on Windows only; `setup.sh` / `run.sh` exist for macOS / Linux but are untested there, and the browser UI is the fallback everywhere.
 
+## Security advisories
+
+`requirements-lock.txt` pins the exact package set the app is tested against, so GitHub's Dependabot
+reports anything the pins lag behind:
+
+- **setuptools** is pinned to 81.0.0 — the newest release the CUDA torch wheel allows
+  (`torch 2.11.0+cu128` requires `setuptools<82`). This carries the fix for the high-severity
+  advisory (78.1.1); the moderate one needs 83.0.0 and has to wait for a torch wheel that permits it.
+- **torch** is pinned to 2.11.0+cu128, the newest CUDA 12.8 build PyTorch publishes for Windows.
+  A low-severity advisory is fixed in 2.13.0, which has no cu128 Windows wheel yet.
+
+Neither affects normal use (LookFX opens no network ports beyond the loopback API and runs no
+untrusted code), and both pins move as soon as a compatible wheel exists. `pip install -e .` without
+the lock file takes the newest versions the bounds in `pyproject.toml` allow.
+
 ## Troubleshooting
 
 - **Log file**: `%LOCALAPPDATA%\lookfx\lookfx.log` (`~/.local/share/lookfx/lookfx.log` on macOS / Linux; server, job and render errors). Attach it to bug reports.
