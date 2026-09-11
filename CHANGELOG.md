@@ -6,7 +6,22 @@ on the commit that bumps `src/lookfx/__init__.py` (see README, *Contributing →
 
 ## [Unreleased]
 
-Nothing yet.
+### Added
+
+- New project / Relink clip… / Save as… commands (Ctrl+N, Ctrl+Shift+S); opening a project whose media moved resolves it next to the project file, else offers Relink.
+- Clip solves are saved in the project (`solves`) and restored on open while the clip (path, size, mtime, range) and source settings are unchanged; a render reuses fresh session solves instead of re-analysing.
+- UI preferences (style, accent, recent files) persist server-side in `%LOCALAPPDATA%\lookfx\settings.json` (`GET/PUT /api/settings/ui`), so they survive port changes.
+- Settings screen shows the cache folder and size, why the GPU is not in use (when it is not), and the known limitations; `/api/health` reports ffmpeg/ffprobe paths and version.
+- Closing the window asks to confirm when there are unsaved changes or running jobs; jobs are cancelled and partial outputs removed before exit.
+
+### Fixed
+
+- Previews no longer wedge the server during a render: the GPU lock is held per chunk, previews answer 409 "rendering" while busy, and health/jobs/cancel are always responsive.
+- Decoded clip caches are deleted when a clip is closed, on exit, and stale ones are swept at startup; at most two live sessions; cache size is estimated and checked against free disk space (`LOOKFX_CACHE_LIMIT_GB`).
+- Stale-solve detection hashes only the analysis inputs (source settings, colour space, depth) and clears when values return; solves follow a layer when it is moved or another is removed (stable step ids).
+- Ranged renders trim depth maps to the same range; project saves are atomic with one `.bak`.
+- GPUs older than the CUDA wheel's architecture list fall back to the CPU with a visible reason instead of failing every kernel.
+- Engine/IO errors in previews and opens surface as JSON `{detail}` (with CUDA memory released on OOM) instead of bare 500s.
 
 ## [0.1.0] - 2026-09-11
 
