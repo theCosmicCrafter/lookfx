@@ -24,8 +24,9 @@ from flarecore.presets_io import PresetExists
 
 from .. import api, __version__
 from ..pipeline import run_project
-from .jobs import JobRunner
+from .jobs import JobRunner, JobQueueFull
 from .sessions import Sessions
+from .security import LocalOnlyMiddleware, new_token
 
 WEB_DIR = Path(__file__).resolve().parents[1] / "web"
 
@@ -71,10 +72,22 @@ class ElementPreviewBody(BaseModel):
     model_config = {"populate_by_name": True}
 
 
-def create_app(scratch_dir: str | None = None) -> FastAPI:
+def create_app(scratch_dir: str | None = None, token: str | None = None) -> FastAPI:
+    """Build the app. ``token`` is the per-launch secret every /api call must present
+    (see ``server.security``); a fresh one is generated when not given. It is exposed
+    as ``app.state.token`` so the launcher can put it in the URL it opens."""
     app = FastAPI(title="lookfx", version=__version__)
     jobs = JobRunner()
     sessions = Sessions(scratch_dir)
+    app.state.token = token or new_token()
+    app.state.jobs = jobs
+    app.state.sessions = sessions
+    app.add_middleware(LocalOnlyMiddleware, token=app.state.token)
+
+    @app.exception_handler(JobQueueFull)
+    def _queue_full(request: Request, exc: JobQueueFull):
+        return JSONResponse({"error": str(exc)}, status_code=429)
+
     device = get_device()
     blobs: dict[str, bytes] = {}
     blob_order: list[str] = []
@@ -402,6 +415,23 @@ def create_app(scratch_dir: str | None = None) -> FastAPI:
     return app
 
 
+def shutdown(app: FastAPI, timeout: float = 30.0) -> None:
+    """Cancel every job, wait for the worker to drain, then close all sessions.
+
+    The launcher calls this when the window closes (before stopping uvicorn) so a
+    running render aborts cleanly and no clip cache is left open."""
+    jobs: JobRunner = app.state.jobs
+    sessions: Sessions = app.state.sessions
+    for job in list(jobs.jobs.values()):
+        if job.state in ("queued", "running"):
+            jobs.cancel(job.id)
+    deadline = time.time() + timeout
+    while any(j.state == "running" for j in list(jobs.jobs.values())) and time.time() < deadline:
+        time.sleep(0.05)
+    for pid in list(sessions._by_id):
+        sessions.close(pid)
+
+
 def _session(sessions: Sessions, pid: str):
     try:
         return sessions.get(pid)
@@ -415,13 +445,16 @@ def free_port(host: str = "127.0.0.1") -> int:
         return s.getsockname()[1]
 
 
-def serve(host: str = "127.0.0.1", port: int = 0, open_browser: bool = False, scratch_dir: str | None = None) -> int:
+def serve(host: str = "127.0.0.1", port: int = 0, open_browser: bool = False, scratch_dir: str | None = None,
+          token: str | None = None) -> int:
     import uvicorn
     port = port or free_port(host)
+    app = create_app(scratch_dir, token=token)
     url = f"http://{host}:{port}/"
-    print(f"lookfx server at {url}  (API docs: {url}docs)", flush=True)
+    # the token is only ever printed here, for the person who started the server
+    print(f"lookfx server at {url}?token={app.state.token}  (API docs: {url}docs)", flush=True)
     if open_browser:
         import webbrowser
-        threading.Timer(0.8, lambda: webbrowser.open(url)).start()
-    uvicorn.run(create_app(scratch_dir), host=host, port=port, log_level="warning")
+        threading.Timer(0.8, lambda: webbrowser.open(f"{url}?token={app.state.token}")).start()
+    uvicorn.run(app, host=host, port=port, log_level="warning")
     return 0

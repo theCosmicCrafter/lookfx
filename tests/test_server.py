@@ -31,7 +31,10 @@ def clip(tmp_path_factory):
 
 @pytest.fixture(scope="module")
 def client(tmp_path_factory):
-    return TestClient(create_app(scratch_dir=str(tmp_path_factory.mktemp("scratch"))))
+    app = create_app(scratch_dir=str(tmp_path_factory.mktemp("scratch")))
+    c = TestClient(app, base_url="http://127.0.0.1")     # loopback Host + per-launch token cookie
+    c.cookies.set("lookfx_token", app.state.token)
+    return c
 
 
 def _wait(client, job_id, timeout=120):

@@ -58,8 +58,13 @@ class Job:
             pass
 
 
+class JobQueueFull(RuntimeError):
+    """Raised by ``JobRunner.submit`` when too many jobs are already queued or running."""
+
+
 class JobRunner:
-    def __init__(self):
+    def __init__(self, max_queued: int = 8):
+        self.max_queued = max_queued
         self.jobs: dict[str, Job] = {}
         self._q: queue.Queue = queue.Queue()
         self._lock = threading.Lock()
@@ -76,6 +81,9 @@ class JobRunner:
             job._emit("progress", job.to_json())
         ctx.on_progress = on_progress
         with self._lock:
+            pending = sum(1 for j in self.jobs.values() if j.state in ("queued", "running"))
+            if pending >= self.max_queued:
+                raise JobQueueFull(f"too many jobs queued ({pending}); wait for one to finish or cancel some")
             self.jobs[job.id] = job
         self._q.put((job, fn, ctx))
         return job

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 import threading
 from pathlib import Path
@@ -53,9 +54,18 @@ def _progress_printer():
     return on_progress
 
 
+def _abs(path):
+    """Absolute form of a user-supplied path (None passes through). ffmpeg and the
+    engines then never see a relative name, so one starting with '-' cannot be read
+    as an option, and cwd changes inside the app cannot redirect it."""
+    return os.path.abspath(path) if path else path
+
+
 def cmd_render(a) -> int:
     from . import api
     from lookfx_core.io.image import is_still
+    for name in ("input", "output", "project", "depth", "plates", "flare_pass"):
+        setattr(a, name, _abs(getattr(a, name, None)))
     steps = _chain_from_args(a)
     cancel = threading.Event()
     ctx = RunContext(on_progress=_progress_printer(), cancel=cancel)
@@ -116,14 +126,14 @@ def cmd_presets(a) -> int:
 
 def cmd_probe(a) -> int:
     from lookfx_core.io.probe import probe
-    info = probe(a.input)
+    info = probe(_abs(a.input))
     print(json.dumps(info.to_json(), indent=2))
     return 0
 
 
 def cmd_serve(a) -> int:
     from .server.app import serve
-    return serve(host=a.host, port=a.port, open_browser=a.open)
+    return serve(host=a.host, port=a.port, open_browser=a.open, token=a.token or None)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -160,6 +170,8 @@ def build_parser() -> argparse.ArgumentParser:
     v.add_argument("--host", default="127.0.0.1")
     v.add_argument("--port", type=int, default=0, help="0 = pick a free port")
     v.add_argument("--open", action="store_true", help="open the UI in the default browser")
+    v.add_argument("--token", default=None,
+                   help="API token clients must present (default: a random per-launch token, printed at start)")
     v.set_defaults(fn=cmd_serve)
     return p
 
