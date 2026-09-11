@@ -25,7 +25,7 @@ classifiers = [
     "Topic :: Multimedia :: Video",
 ]
 # Compatible-release bounds; the exact tested set is in requirements-lock.txt
-# (setup.bat installs from it). torch comes from the cu128 index, not PyPI.
+# (setup.bat installs from it). torch comes from the cu130 index, not PyPI.
 dependencies = [
     "torch>=2.7,<3",
     "numpy>=2,<3",

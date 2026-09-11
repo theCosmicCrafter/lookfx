@@ -55,19 +55,19 @@ LookFX itself is Apache-2.0 (`LICENSE`).
 - **Python 3.12** with the `py` launcher (python.org installer; tick "py launcher").
 - **ffmpeg / ffprobe on PATH** (`winget install Gyan.FFmpeg`), or point `LOOKFX_FFMPEG` / `LOOKFX_FFPROBE` at the binaries. Stills work without ffmpeg; video does not.
 - **Microsoft Edge WebView2 runtime** for the desktop window (preinstalled on current Windows; otherwise `winget install Microsoft.EdgeWebView2Runtime`). Without it the window opens blank; the browser UI still works.
-- **NVIDIA GPU recommended** (CUDA 12.8 wheel, tested on RTX 50-series, ~11 GB VRAM peak at 1080p). AMD, Intel and no-GPU machines run the same engines on the CPU: correct, but many times slower (minutes per 1080p frame batch rather than seconds).
+- **NVIDIA GPU recommended** (CUDA 13.0 wheel, driver 580+; tested on RTX 50-series, ~11 GB VRAM peak at 1080p). AMD, Intel and no-GPU machines run the same engines on the CPU: correct, but many times slower (minutes per 1080p frame batch rather than seconds).
 - **Disk for clip caches**: decoded clips are held as 16-bit frames in the scratch dir — about **6 bytes per pixel per frame** (1080p x 300 frames ≈ 3.7 GB, 4K ≈ 4x that). Caches are deleted when the clip is closed.
 - ~4.5 GB of disk for the virtual environment (the CUDA torch wheel is most of it).
 
 ## Setup
 
-Double-click **`setup.bat`** (needs Python 3.12 and ffmpeg on PATH, see above). It creates `.venv`, installs the exact tested package set from `requirements-lock.txt` (torch from the CUDA 12.8 index, or the CPU wheel when no NVIDIA driver is found / with `setup.bat --cpu`), installs the app, and stops with an error if the torch install fails instead of silently falling back to a CPU build. A "CUDA not available" warning at the end means renders will run on the CPU.
+Double-click **`setup.bat`** (needs Python 3.12 and ffmpeg on PATH, see above). It creates `.venv`, installs the exact tested package set from `requirements-lock.txt` (torch from the CUDA 13.0 index, or the CPU wheel when no NVIDIA driver is found / with `setup.bat --cpu`), installs the app, and stops with an error if the torch install fails instead of silently falling back to a CPU build. A "CUDA not available" warning at the end means renders will run on the CPU.
 
 Manual equivalent:
 
 ```bat
 py -3.12 -m venv .venv
-.venv\Scripts\pip install torch==<version from requirements-lock.txt> --index-url https://download.pytorch.org/whl/cu128
+.venv\Scripts\pip install torch==<version from requirements-lock.txt> --index-url https://download.pytorch.org/whl/cu130
 .venv\Scripts\pip install -r requirements-lock.txt
 .venv\Scripts\pip install --no-deps -e .
 .venv\Scripts\pytest
@@ -77,7 +77,7 @@ py -3.12 -m venv .venv
 
 ### macOS / Linux (untested)
 
-`setup.sh` does what `setup.bat` does: a Python 3.12 `.venv`, torch pinned to the version in `requirements-lock.txt` (Linux: from the CUDA 12.8 index, or the CPU wheel with `./setup.sh --cpu` / when no NVIDIA driver is found; macOS: the plain PyPI wheel, CPU or MPS), the rest of the locked set (minus the Windows-only `pythonnet` / `clr_loader`), then `pip install --no-deps -e .` and an ffmpeg check.
+`setup.sh` does what `setup.bat` does: a Python 3.12 `.venv`, torch pinned to the version in `requirements-lock.txt` (Linux: from the CUDA 13.0 index, or the CPU wheel with `./setup.sh --cpu` / when no NVIDIA driver is found; macOS: the plain PyPI wheel, CPU or MPS), the rest of the locked set (minus the Windows-only `pythonnet` / `clr_loader`), then `pip install --no-deps -e .` and an ffmpeg check.
 
 ```sh
 chmod +x setup.sh run.sh     # only if the clone lost the executable bits
@@ -172,21 +172,6 @@ The Settings screen lists the same points.
 - **Project files store both absolute and relative media paths**; when neither resolves, the file is looked for by name next to the project, else *Relink clip…*; one clip per project.
 - **A ranged render reuses a covering solve** (the session's whole-clip solve sliced to the range) and re-solves only when no fresh solve covers it.
 - The desktop shell is tested on Windows only; `setup.sh` / `run.sh` exist for macOS / Linux but are untested there, and the browser UI is the fallback everywhere.
-
-## Security advisories
-
-`requirements-lock.txt` pins the exact package set the app is tested against, so GitHub's Dependabot
-reports anything the pins lag behind:
-
-- **setuptools** is pinned to 81.0.0 — the newest release the CUDA torch wheel allows
-  (`torch 2.11.0+cu128` requires `setuptools<82`). This carries the fix for the high-severity
-  advisory (78.1.1); the moderate one needs 83.0.0 and has to wait for a torch wheel that permits it.
-- **torch** is pinned to 2.11.0+cu128, the newest CUDA 12.8 build PyTorch publishes for Windows.
-  A low-severity advisory is fixed in 2.13.0, which has no cu128 Windows wheel yet.
-
-Neither affects normal use (LookFX opens no network ports beyond the loopback API and runs no
-untrusted code), and both pins move as soon as a compatible wheel exists. `pip install -e .` without
-the lock file takes the newest versions the bounds in `pyproject.toml` allow.
 
 ## Troubleshooting
 

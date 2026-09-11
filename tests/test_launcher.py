@@ -224,7 +224,7 @@ def test_shell_launchers_exist_and_are_executable(name):
     text = script.read_text(encoding="utf-8")
     assert text.startswith("#!/usr/bin/env bash") and "\r" not in text, "bash scripts must be LF"
     if name == "setup.sh":
-        assert "requirements-lock.txt" in text and "--no-deps -e ." in text and "cu128" in text
+        assert "requirements-lock.txt" in text and "--no-deps -e ." in text and "cu130" in text
     else:
         assert "main.py" in text
     mode = subprocess.run(["git", "ls-files", "-s", name], cwd=str(ROOT), capture_output=True, text=True)

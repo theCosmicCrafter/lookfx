@@ -2,7 +2,7 @@
 # LookFX one-time setup for macOS / Linux (untested; mirrors setup.bat): creates .venv,
 # installs torch + the locked dependency set + the app. Needs Python 3.12 and ffmpeg on PATH.
 #   ./setup.sh [--cpu]
-#   --cpu   Linux: install the CPU-only torch wheel (default: the CUDA 12.8 wheel when nvidia-smi is found)
+#   --cpu   Linux: install the CPU-only torch wheel (default: the CUDA 13.0 wheel when nvidia-smi is found)
 #           macOS: has no effect - PyPI's torch wheel is the only one (CPU / MPS)
 set -euo pipefail
 cd "$(dirname "$0")"
@@ -19,11 +19,11 @@ if [ -z "$PY" ]; then
 fi
 command -v ffmpeg >/dev/null 2>&1 || echo "WARNING: ffmpeg not on PATH - video will not work until it is (brew install ffmpeg / apt install ffmpeg)."
 
-# torch: exact version from requirements-lock.txt. Linux gets the cu128 (or cpu) wheel from
+# torch: exact version from requirements-lock.txt. Linux gets the cu130 (or cpu) wheel from
 # the PyTorch index like setup.bat; macOS has one wheel on PyPI (CPU, MPS where available).
 TORCH_SPEC="$(grep -i '^torch==' requirements-lock.txt || echo torch)"
-TORCH_INDEX="https://download.pytorch.org/whl/cu128"
-TORCH_FLAVOR="CUDA 12.8"
+TORCH_INDEX="https://download.pytorch.org/whl/cu130"
+TORCH_FLAVOR="CUDA 13.0"
 if [ "$(uname -s)" = "Darwin" ]; then
   TORCH_INDEX=""
   TORCH_FLAVOR="macOS (CPU / MPS)"

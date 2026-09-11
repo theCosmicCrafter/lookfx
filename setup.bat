@@ -1,11 +1,11 @@
 @echo off
 rem LookFX one-time setup: creates .venv, installs torch + the locked dependency set + the app.
 rem Needs Python 3.12 (py launcher) and ffmpeg on PATH. Usage:  setup.bat [--cpu]
-rem   --cpu   install the CPU-only torch wheel (default: CUDA 12.8 wheel when nvidia-smi is found)
+rem   --cpu   install the CPU-only torch wheel (default: CUDA 13.0 wheel when nvidia-smi is found)
 setlocal
 cd /d "%~dp0"
-set "TORCH_INDEX=https://download.pytorch.org/whl/cu128"
-set "TORCH_FLAVOR=CUDA 12.8"
+set "TORCH_INDEX=https://download.pytorch.org/whl/cu130"
+set "TORCH_FLAVOR=CUDA 13.0"
 if /i "%~1"=="--cpu" goto cpu
 where nvidia-smi >nul 2>nul && goto checks
 echo WARNING: nvidia-smi not found - no NVIDIA driver detected. Installing the CPU-only torch wheel.
@@ -23,7 +23,7 @@ if not exist ".venv\Scripts\python.exe" py -3.12 -m venv .venv || (echo Could no
 rem torch: exact version from requirements-lock.txt, from the PyTorch index (PyPI only has the CPU wheel on Windows).
 set "TORCH_SPEC=torch"
 for /f "delims=" %%L in ('findstr /b /i "torch==" requirements-lock.txt') do set "TORCH_SPEC=%%L"
-if "%TORCH_FLAVOR%"=="CPU-only" set "TORCH_SPEC=%TORCH_SPEC:+cu128=%"
+if "%TORCH_FLAVOR%"=="CPU-only" set "TORCH_SPEC=%TORCH_SPEC:+cu130=%"
 echo Installing %TORCH_SPEC% (%TORCH_FLAVOR%) from %TORCH_INDEX% ...
 ".venv\Scripts\pip.exe" install "%TORCH_SPEC%" --index-url "%TORCH_INDEX%" || (
   echo.

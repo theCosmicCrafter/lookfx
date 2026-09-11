@@ -8,6 +8,18 @@ on the commit that bumps `src/lookfx/__init__.py` (see README, *Contributing →
 
 Nothing yet.
 
+## [0.1.2] - 2026-09-11
+
+### Changed
+
+- **CUDA 13 / torch 2.14.** `setup.bat` / `setup.sh` install `torch==2.14.0+cu130` (was
+  `2.11.0+cu128`) and `setuptools==84.0.0`, which clears all three dependency advisories the
+  0.1.1 lock carried (one high, one moderate, one low). Measured on an RTX 5090: renders are a
+  little faster than the cu128 build (0.58 vs 0.52 fps on eight 1080p frames through flare +
+  print look), and the full suite passes unchanged. **Needs NVIDIA driver 580 or newer**; older
+  drivers should keep 0.1.1 or install the CPU wheel with `setup.bat --cpu`.
+- The README's *Security advisories* section is gone with the advisories.
+
 ## [0.1.1] - 2026-09-11
 
 HDR sources, sequence / still frame rates, output naming, relative project paths and a
