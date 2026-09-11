@@ -6,7 +6,15 @@ on the commit that bumps `src/lookfx/__init__.py` (see README, *Contributing →
 
 ## [Unreleased]
 
-### Added
+Nothing yet.
+
+## [0.1.0] - 2026-09-11
+
+First public work-in-progress release.
+
+### Release hardening, wave 2
+
+#### Added
 
 - New project / Relink clip… / Save as… commands (Ctrl+N, Ctrl+Shift+S); opening a project whose media moved resolves it next to the project file, else offers Relink.
 - Clip solves are saved in the project (`solves`) and restored on open while the clip (path, size, mtime, range) and source settings are unchanged; a render reuses fresh session solves instead of re-analysing.
@@ -14,7 +22,7 @@ on the commit that bumps `src/lookfx/__init__.py` (see README, *Contributing →
 - Settings screen shows the cache folder and size, why the GPU is not in use (when it is not), and the known limitations; `/api/health` reports ffmpeg/ffprobe paths and version.
 - Closing the window asks to confirm when there are unsaved changes or running jobs; jobs are cancelled and partial outputs removed before exit.
 
-### Fixed
+#### Fixed
 
 - Previews no longer wedge the server during a render: the GPU lock is held per chunk, previews answer 409 "rendering" while busy, and health/jobs/cancel are always responsive.
 - Decoded clip caches are deleted when a clip is closed, on exit, and stale ones are swept at startup; at most two live sessions; cache size is estimated and checked against free disk space (`LOOKFX_CACHE_LIMIT_GB`).
@@ -23,7 +31,6 @@ on the commit that bumps `src/lookfx/__init__.py` (see README, *Contributing →
 - GPUs older than the CUDA wheel's architecture list fall back to the CPU with a visible reason instead of failing every kernel.
 - Engine/IO errors in previews and opens surface as JSON `{detail}` (with CUDA memory released on OOM) instead of bare 500s.
 
-## [0.1.0] - 2026-09-11
 
 First release: a standalone Windows stills + video FX app with no ComfyUI dependency.
 

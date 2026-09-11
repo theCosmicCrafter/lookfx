@@ -822,4 +822,14 @@ async function boot() {
   if (state.settings?.ffmpeg !== null) status("ready");
 }
 
-boot().catch((e) => { console.error(e); status(e.message, "error"); toast(`Startup failed: ${e.message}`); });
+boot().catch((e) => {
+  console.error(e);
+  // A bare 401 at boot means the page was opened without the launch link's
+  // token (browser mode): say so instead of a status code.
+  const msg = /^401\b/.test(e.message)
+    ? "Not authorised: open LookFX from the link printed by `lookfx serve` (it carries the session token), or use run.bat."
+    : `Startup failed: ${e.message}`;
+  status(msg, "error");
+  toast(msg);
+  $("#view-empty").textContent = msg;
+});
