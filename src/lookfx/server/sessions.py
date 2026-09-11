@@ -141,12 +141,19 @@ class ProjectSession:
         ``ctx`` stops the decode within a frame and leaves no media open."""
         with self.lock:
             if self.closed:
+                # the session was replaced while this job sat in the queue
+                if ctx is not None and ctx.cancel is not None:
+                    ctx.cancel.set()
+                    ctx.check_cancel()
                 raise RuntimeError("session closed")
             self._busy_ctx = ctx
             try:
                 return self._open_media(ctx)
             except BaseException:
-                self.close_media()
+                # keep the main clip (and its solves) when only an aux decode
+                # failed: _open_aux/cache raise before the aux is registered
+                if self.source is None:
+                    self.close_media()
                 raise
             finally:
                 self._busy_ctx = None
@@ -277,6 +284,9 @@ class ProjectSession:
     def solve(self, step_index: int, ctx: RunContext) -> dict:
         with self.lock:
             if self.closed:
+                if ctx is not None and ctx.cancel is not None:
+                    ctx.cancel.set()
+                    ctx.check_cancel()
                 raise RuntimeError("session closed")
             self._busy_ctx = ctx
             try:

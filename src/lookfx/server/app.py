@@ -164,14 +164,21 @@ def sweep_stale_caches(scratch_dir: str | None, older_than: float) -> list[Path]
     return removed
 
 
+_WRITE_LOCK = threading.Lock()
+
+
 def _atomic_write_json(path: Path, data: Any) -> None:
+    """Write via a unique temp file + os.replace, serialised: the UI fires
+    pref saves back to back on separate threadpool threads."""
+    import uuid
     path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
-    try:
-        tmp.write_text(json.dumps(data, indent=2), encoding="utf-8")
-        os.replace(tmp, path)
-    finally:
-        tmp.unlink(missing_ok=True)
+    tmp = path.with_name(f".{path.name}.{os.getpid()}.{uuid.uuid4().hex[:8]}.tmp")
+    with _WRITE_LOCK:
+        try:
+            tmp.write_text(json.dumps(data, indent=2), encoding="utf-8")
+            os.replace(tmp, path)
+        finally:
+            tmp.unlink(missing_ok=True)
 
 
 def _error_detail(e: BaseException) -> str:
