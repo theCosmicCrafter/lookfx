@@ -1,11 +1,53 @@
 # LookFX
 
-Standalone stills + video FX app (no ComfyUI) built on two vendored engines:
+**Put a lens flare into your footage that actually follows the light — then, if you want it, print the whole thing like it came off a press.**
 
-- **Flare** — procedural lens flares with clip-wide tracking, occlusion and visibility (Flarecore, Apache-2.0)
-- **Print Look** — custom-ink halftone / print separation (CMYK Magic, MIT)
+LookFX is a desktop app for Windows (macOS and Linux untested) that does two things to a photo, an image sequence or a video clip:
 
-Viewer-first, layer-based UI (place the light, solve the clip, stack the print look, render), a CLI, and a local HTTP API. See `NOTICE` and `src/*/VENDORED.md` for attribution and the changes made to each engine.
+### 1. Flares that stick to the light
+
+Drop a flare on a shot and it stays on the light through the whole clip. Not a sticker floating over the picture — LookFX looks at your footage first:
+
+- **Finds the light.** Point at it, let it detect the brightest source, or track that source frame by frame. You can also track any feature you click (a lamp, a window edge, a reflection) or let the flare ride the camera's own motion when the source is off screen.
+- **Hides it when something passes in front.** Hand it a depth map and the flare dims, shrinks and comes back as a tree, a pillar or a passing head crosses the source — the way a real lens behaves. It also measures how much of the source is actually visible in the picture, so the flare fades instead of blinking.
+- **Is built like a lens, not a preset.** Glows, iris ghosts, anamorphic streaks, rings, glints, spectral rings, lens dirt — each a layer you can move along the flare axis, recolour, stretch, blur and animate. 41 presets ship with it (clean modern spherical, vintage coated, sodium street, anamorphic hero, film halation…), plus 182 element textures. Everything renders in linear light, so the flare adds light to the picture instead of smearing pixels over it.
+- **Moves the way lenses move.** Elements can respond to where the source sits in frame — bloom as it nears the centre, streaks widening toward the edge, flicker on a practical lamp.
+
+### 2. A print look you can actually control
+
+The second layer turns the picture into ink on paper: your own ink set, one halftone screen per ink, at the angles and pitch you choose.
+
+- Pick the inks (any colours, any number, any print order) or start from 37 presets — vintage poster, newsprint, risograph, comic, FOGRA-ish proof.
+- 17 screen patterns (classic dots, lines, crosshatch, Ben-Day, stochastic…), dot gain, ink opacity, paper tone, misregistration, tint quantisation to the levels a colourist could actually call for.
+- Get the separated ink plates out as a separate file when you need them.
+
+### Made for clips, not just frames
+
+- **Solve once, render fast.** The clip-wide analysis runs once; every frame then renders on the GPU. 300 frames of 1080p with a tracked flare and a print look takes under a minute on an RTX 5090.
+- **See it before you commit.** Scrub the timeline, compare with an A/B wipe, watch the track and the source's visibility on a lane under the clip, then render the range you want.
+- **Out where you need it.** ProRes, H.264/HEVC (NVIDIA-accelerated), lossless FFV1, 16-bit PNG/TIFF sequences or a single still. Audio comes along. Renders queue up with progress and a cancel button.
+- **Where the pixels stay yours.** No account, no cloud, no telemetry — everything runs on your machine.
+
+Also usable from the command line (`lookfx render shot.mp4 out.mov --flare cine_blue --print "Vintage Poster"`) and, if you want to build on it, through a local HTTP API.
+
+![Plate, flare, print look](docs/example_strip.jpg)
+
+*The app's own test card, run through both layers: the plate, a tracked flare over it, and the whole thing separated into four inks.*
+
+## Credits
+
+LookFX is a shell and a video pipeline around two excellent engines written by other people. Both are vendored here (modified — see each `VENDORED.md`), and both keep their own licence:
+
+| Engine | What it does | Author | Licence |
+|---|---|---|---|
+| [Flarecore](https://github.com/cyco-creates/Flarecore) | The whole flare system — optics, elements, tracking, occlusion | cyco.creates | Apache-2.0 |
+| [ComfyUI-CMYK-Magic](https://github.com/marcsole96/ComfyUI-CMYK-Magic) | The custom-ink halftone / print separation | Marc Solé | MIT |
+
+Both started life as ComfyUI custom nodes; LookFX lifts the engines out, keeps their editors, and wraps them in a standalone app with video IO, tracking-aware rendering and a render queue. See `NOTICE` for the full attribution and `src/flarecore/VENDORED.md` / `src/cmykmagic/VENDORED.md` for every change made to them. Interface typeface: IBM Plex (SIL OFL 1.1). Video IO: ffmpeg.
+
+LookFX itself is Apache-2.0 (`LICENSE`).
+
+> **Work in progress.** This is a 0.1.x release: it works end to end on the author's machine and has 830+ tests, but it has not been run on many other computers yet. Bug reports — with `%LOCALAPPDATA%\lookfx\lookfx.log` attached — are exactly what it needs. See *Known limitations* before you file one.
 
 ## Requirements
 
