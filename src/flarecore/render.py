@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# Modified for lookfx (see VENDORED.md)
 """Render a procedural lens flare over an image batch (lookfx fork).
 
 Upstream this was the ``FlareRender`` ComfyUI node. The orchestration is now
@@ -478,11 +479,17 @@ def _resolved_params(params):
 
 
 def analyze_lights(linear_chunk, batch, height, width, p, *, depth=None, lights=None,
-                   chunk=8, device=None, dtype=torch.float32, ctx=None, final=False):
+                   chunk=8, device=None, dtype=torch.float32, ctx=None, final=False,
+                   depth_frames=None):
     """Whole-clip light analysis. ``linear_chunk(start, stop)`` yields that
     slice of the clip in linear light on ``device``; pixels are only touched
     a slice at a time. Returns ``(lights_per_frame, light_source)`` — small
-    per-frame CPU data, exactly what the ``lights`` input consumes."""
+    per-frame CPU data, exactly what the ``lights`` input consumes.
+
+    ``depth`` is either a whole ``[N,H,W,C]`` tensor or, like
+    ``linear_chunk``, a ``(start, stop)`` reader handing back that slice
+    (then ``depth_frames`` says how many frames it covers), so a long depth
+    clip is never resident at once."""
     position_mode = p["position_mode"]
     if lights is not None and final:
         # Already analysed (occlusion, visibility, travel applied) by a
@@ -519,7 +526,18 @@ def analyze_lights(linear_chunk, batch, height, width, p, *, depth=None, lights=
 
     visibility_mode = p["visibility_mode"]
     if depth is not None and visibility_mode in ("hybrid", "depth"):
-        bd = depth.shape[0]
+        if callable(depth):
+            if depth_frames is None:
+                raise ValueError("a depth slice reader needs depth_frames (the clip length)")
+            depth_slice = depth
+            bd = int(depth_frames)
+            probe = depth_slice(0, 1)
+            dh, dw = int(probe.shape[1]), int(probe.shape[2])
+            del probe
+        else:
+            depth_slice = lambda s, e: depth[s:e]
+            bd = int(depth.shape[0])
+            dh, dw = int(depth.shape[1]), int(depth.shape[2])
         if 1 < bd < batch:
             raise ValueError(
                 f"depth batch ({bd}) is shorter than the image batch "
@@ -537,15 +555,15 @@ def analyze_lights(linear_chunk, batch, height, width, p, *, depth=None, lights=
             lo = torch.tensor(float("inf"))
             hi = torch.tensor(float("-inf"))
             for s in range(0, bd, chunk):
-                dm = depth[s:s + chunk, ..., :3].to(device=device, dtype=dtype).mean(dim=-1)
+                dm = depth_slice(s, min(s + chunk, bd))[..., :3].to(device=device, dtype=dtype).mean(dim=-1)
                 lo = torch.minimum(lo, dm.amin().cpu())
                 hi = torch.maximum(hi, dm.amax().cpu())
         # Shaped from the DEPTH, not the image: depth models return their
         # own resolution and occlusion samples the map in normalised u,v,
         # so the two never have to agree.
-        depth_cpu = torch.empty(bd, int(depth.shape[1]), int(depth.shape[2]), dtype=dtype)
+        depth_cpu = torch.empty(bd, dh, dw, dtype=dtype)
         for s in range(0, bd, chunk):
-            dm = depth[s:s + chunk, ..., :3].to(device=device, dtype=dtype).mean(dim=-1)
+            dm = depth_slice(s, min(s + chunk, bd))[..., :3].to(device=device, dtype=dtype).mean(dim=-1)
             if norm == "per_batch":
                 span = (hi - lo).clamp(min=1e-6).to(dm.device, dm.dtype)
                 dm = ((dm - lo.to(dm.device, dm.dtype)) / span).clamp(0.0, 1.0)
