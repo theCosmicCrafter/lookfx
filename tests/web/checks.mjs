@@ -12,6 +12,7 @@ globalThis.window = globalThis;
 const web = new URL("../../src/lookfx/web/", import.meta.url);
 const { Store, store } = await import(new URL("store.js", web));
 const { coerceParam, FakeNode } = await import(new URL("nodes.js", web));
+const { outputPathFor, stemOf, CODEC_EXT } = await import(new URL("paths.js", web));
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let n = 0;
@@ -80,5 +81,27 @@ check("json widget text matches the pretty form the flare editor writes", () => 
   check("redo works after the coalesced undo", () => assert.equal(s.doc.chain[0].params.light_x, 0.3));
   await sleep(600);           // let the quiet timer settle before exit
 }
+
+// --- correctness-6: the render dialog shows the path the sink will write ----
+check("sequence codecs swap the shown extension to png / tif", () => {
+  assert.equal(outputPathFor("D:\shots\a.b\shot_fx.mov", "png_seq"), "D:\shots\a.b\shot_fx.png");
+  assert.equal(outputPathFor("/x/shot_fx.mov", "png8_seq"), "/x/shot_fx.png");
+  assert.equal(outputPathFor("/x/shot_fx.mov", "tiff_seq"), "/x/shot_fx.tif");
+  assert.equal(outputPathFor("/x/shot_fx.tiff", "tiff_seq"), "/x/shot_fx.tiff");   // accepted as-is by the sink
+  assert.equal(outputPathFor("/x/shot_fx.png", "png_seq"), "/x/shot_fx.png");
+  assert.equal(outputPathFor("/x.y/shot_fx", "png_seq"), "/x.y/shot_fx.png");       // dotted folder, no extension
+});
+check("video codecs follow their container; still keeps the typed extension", () => {
+  assert.equal(outputPathFor("/x/shot_fx.png", "prores"), "/x/shot_fx.mov");
+  assert.equal(outputPathFor("/x/shot_fx.mov", "h264_nvenc"), "/x/shot_fx.mp4");
+  assert.equal(outputPathFor("/x/shot_fx.mov", "ffv1"), "/x/shot_fx.mkv");
+  assert.equal(outputPathFor("/x/shot_fx.MOV", "prores"), "/x/shot_fx.MOV");
+  assert.equal(outputPathFor("/x/shot_fx.tif", "still"), "/x/shot_fx.tif");
+  assert.equal(outputPathFor("/x/shot_fx.JPG", "still"), "/x/shot_fx.JPG");
+  assert.equal(outputPathFor("/x/shot_fx.mov", "still"), "/x/shot_fx.png");     // a still cannot go into a container
+  assert.equal(outputPathFor("", "prores"), "");
+  assert.equal(stemOf("/a.b/c.d/e"), "/a.b/c.d/e");
+  assert.deepEqual(Object.keys(CODEC_EXT).sort(), ["ffv1", "h264", "h264_nvenc", "hevc_nvenc", "png8_seq", "png_seq", "prores", "prores_4444", "tiff_seq"]);
+});
 
 console.log(`1..${n}`);

@@ -15,6 +15,7 @@ WEB = ROOT / "src" / "lookfx" / "web"
 INDEX = (WEB / "index.html").read_text(encoding="utf-8")
 APP_JS = (WEB / "app.js").read_text(encoding="utf-8")
 APP_CSS = (WEB / "app.css").read_text(encoding="utf-8")
+PATHS_JS = (WEB / "paths.js").read_text(encoding="utf-8")
 FLARE_UI = (WEB / "vendor" / "flarecore" / "flarecore_ui.js").read_text(encoding="utf-8")
 MODULES = sorted(p for p in WEB.rglob("*.js"))
 
@@ -98,8 +99,73 @@ def test_render_dialog_still_codec_is_selectable_before_value_assignment():
 
 
 def test_aux_paths_strip_extension_not_dotted_folder():
-    assert re.search(r"EXT_RX = /\\\.\[\^\.\\\\/\]\+\$/", APP_JS), "extension regex must exclude path separators"
-    assert re.search(r'\.replace\(/\\\.\[\^\.\]\+\$/', APP_JS) is None
+    assert re.search(r"EXT_RX = /\\\.\[\^\.\\\\/\]\+\$/", PATHS_JS), "extension regex must exclude path separators"
+    assert 'from "./paths.js"' in APP_JS and "EXT_RX" in APP_JS
+    for src in [APP_JS, PATHS_JS]:
+        assert re.search(r'\.replace\(/\\\.\[\^\.\]\+\$/', src) is None
+
+
+# --- correctness-6: the render dialog shows the extension the sink writes -------------
+
+def test_render_dialog_follows_the_codec():
+    assert "outputPathFor(" in _slice(APP_JS, "openRenderDialog")
+    assert "outputPathFor(" in _slice(APP_JS, "startRender")
+    assert re.search(r'\$\("#rd-codec"\)\.onchange = .*outputPathFor\(', APP_JS)
+    assert 'png_seq: ".png"' in PATHS_JS and 'png8_seq: ".png"' in PATHS_JS and 'tiff_seq: ".tif"' in PATHS_JS
+
+
+# --- critic-8 / critic-5: project commands and server-side UI settings ---------------
+
+def test_project_commands_are_wired():
+    for bid in ["btn-new", "btn-relink", "btn-save", "btn-save-as", "btn-new-welcome"]:
+        assert f'id="{bid}"' in INDEX, bid
+        assert f'$("#{bid}").onclick' in APP_JS, bid
+    relink = _slice(APP_JS, "relinkClip")
+    assert "/relink`" in relink
+    assert re.search(r'/save`, \{ path, backup: true \}', _slice(APP_JS, "saveProject"))
+    # a server without the endpoint gets a toast, not a console error
+    assert '"404"' in relink and "toast(" in relink
+    new = _slice(APP_JS, "newProject")
+    assert "confirmDiscard()" in new and 'method: "DELETE"' in new
+    # disabled until a clip is open, like Save
+    enabled = _slice(APP_JS, "updateEnabled")
+    assert '"#btn-save-as"' in enabled and '"#btn-relink"' in enabled
+    assert 'e.key.toLowerCase() === "n"' in APP_JS
+
+
+def test_prefs_use_the_server_settings_blob_with_local_fallback():
+    m = re.search(r"^const prefs = \{(.*?)^\};", APP_JS, re.M | re.S)
+    assert m, "prefs object"
+    body = m.group(1)
+    assert 'fetch("/api/settings/ui")' in body and 'put("/api/settings/ui"' in body
+    assert "r.status === 404" in body and "localStorage.getItem" in body and "localStorage.setItem" in body
+    assert "document.cookie" not in APP_JS                      # the cookie hack is gone
+    assert "await prefs.load()" in _slice(APP_JS, "boot")
+
+
+def test_settings_screen_lists_the_limitations():
+    m = re.search(r'<div class="sgroup" id="limitations">(.*?)</ul></div>', INDEX, re.S)
+    assert m, "limitations block"
+    text = re.sub(r"<[^>]+>", "", m.group(1))
+    for phrase in ["SDR only", "BT.709", "EXR is input-only", "Audio is copied", "One clip per project", "Windows desktop shell only"]:
+        assert phrase in text, phrase
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    assert "## Known limitations" in readme and "Settings screen" in readme
+
+
+# --- pkg-12 / web handoff: vendored panel header and font attribution ----------------
+
+def test_cmyk_panel_carries_spdx_and_provenance():
+    lines = (WEB / "vendor" / "cmykmagic" / "cmyk_magic.js").read_text(encoding="utf-8").splitlines()
+    assert lines[0] == "// SPDX-License-Identifier: MIT"
+    assert "ComfyUI-CMYK-Magic" in lines[1] and "VENDORED.md" in lines[1]
+    for p in (WEB / "vendor").rglob("*.js"):
+        assert p.read_text(encoding="utf-8").startswith("// SPDX-License-Identifier: "), p
+
+
+def test_notice_attributes_the_fonts():
+    notice = (ROOT / "NOTICE").read_text(encoding="utf-8")
+    assert "IBM Plex" in notice and "SIL Open Font License" in notice and "fonts/OFL.txt" in notice
 
 
 def test_shortcuts_skip_dock_buttons_and_dialogs():

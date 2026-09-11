@@ -1,7 +1,8 @@
 """lookfx.cli: the console entry point (`lookfx = lookfx.cli:main`).
 
-Everything here runs on the CPU (``--device cpu``); the video test needs ffmpeg
-and is gated by the ``needs_ffmpeg`` marker like the IO suite.
+Everything here runs on the CPU (``--device cpu``); the tests that go through
+ffmpeg / ffprobe (``lookfx probe``, the video render) are gated by the
+``needs_ffmpeg`` marker like the IO suite.
 """
 
 from fractions import Fraction
@@ -21,13 +22,17 @@ def still(tmp_path):
     return p
 
 
-def test_presets_and_probe(still, capsys):
+def test_presets(capsys):
     assert cli_main(["presets"]) == 0
     flare = capsys.readouterr().out.splitlines()
     assert any(line.startswith("cine_blue") for line in flare)
     assert cli_main(["presets", "print_look"]) == 0
     print_look = capsys.readouterr().out.splitlines()
     assert any(line.startswith("Vintage Poster") for line in print_look)
+
+
+@pytest.mark.needs_ffmpeg          # `probe` describes even a still through ffprobe
+def test_probe_still(still, capsys):
     assert cli_main(["probe", str(still)]) == 0
     out = capsys.readouterr().out
     assert '"kind": "still"' in out and '"width": 60' in out

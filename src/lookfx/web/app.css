@@ -240,6 +240,9 @@ body[data-theme="light"] #params .lx-mounted.cmyk-root, body[data-theme="paper"]
 .srow { display:flex; align-items:center; gap:14px; padding:11px 14px; border-bottom:1px solid var(--bg2); }
 .srow:last-child { border-bottom:0; } .srow .hint { color:var(--dim); font-size:10.5px; margin-top:2px; }
 .srow .val { font-family:'IBM Plex Mono', monospace; font-size:11px; color:var(--acct); border:1px solid var(--line); background:var(--bg0); border-radius:3px; padding:4px 9px; max-width:320px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.limits { margin:0; padding:6px 14px 6px 30px; font-size:11.5px; line-height:1.55; color:var(--dim); }
+.limits li { padding:5px 0; } .limits b { color:var(--text); font-weight:600; }
+.limits code { font-family:'IBM Plex Mono', monospace; font-size:10.5px; background:var(--bg0); padding:1px 5px; border-radius:3px; }
 
 /* status bar */
 #statusbar { height:24px; flex:none; display:flex; align-items:center; gap:16px; padding:0 12px; background:var(--bg1); border-top:1px solid var(--line); font-family:'IBM Plex Mono', monospace; font-size:9.5px; color:var(--dim); }
