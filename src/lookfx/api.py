@@ -161,6 +161,7 @@ def validate_project(doc: dict) -> dict:
     proj = Project.from_json(doc)
     proj.validate()
     proj.app = {"lookfx": __version__}
+    proj.solves = {}          # saved solves are the session's business, not part of a validated doc
     return proj.to_json()
 
 

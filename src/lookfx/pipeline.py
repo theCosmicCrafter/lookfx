@@ -89,7 +89,13 @@ def _needs_analysis(effects: list[Effect]) -> bool:
     return any(type(e).analyze is not Effect.analyze for e in effects)
 
 
-def run_project(project: Project, ctx: RunContext | None = None) -> RunReport:
+def run_project(project: Project, ctx: RunContext | None = None, states: list | None = None) -> RunReport:
+    """Render ``project``. ``states`` (one entry per enabled step, as
+    ``EffectChain.analyze`` returns them) skips the analysis pass: the server
+    passes the session's whole-clip solves, sliced to the render range, so a
+    ranged render reproduces the previewed track instead of re-solving over
+    the trimmed frames. ``ctx.gpu_lock`` (when set) is held only while a
+    chunk is being analysed or rendered on the device."""
     ctx = ctx or RunContext()
     t0 = time.time()
     chain = project.validate()
@@ -121,14 +127,18 @@ def run_project(project: Project, ctx: RunContext | None = None) -> RunReport:
     sinks: dict[str, FrameSink] = {}
     try:
         # --- analysis: whole-clip context, small CPU results ---------------
-        if src.nb_frames is None or _needs_analysis(chain.effects):
+        if src.nb_frames is None or (states is None and _needs_analysis(chain.effects)):
             src.cache(ctx)            # analysers read the clip several times
         for a in aux.values():
             a.cache(ctx)
         total = src.nb_frames
         ctx.total_frames = total
         ctx.fps = float(src.info.fps)
-        states = chain.analyze(src, aux, ctx)
+        if states is None:
+            with ctx.gpu():
+                states = chain.analyze(src, aux, ctx)
+        elif len(states) != len(chain.effects):
+            raise ValueError(f"{len(states)} solve states for {len(chain.effects)} enabled steps")
 
         # --- render --------------------------------------------------------
         height, width = src.height, src.width
@@ -142,7 +152,8 @@ def run_project(project: Project, ctx: RunContext | None = None) -> RunReport:
             for offset, frames in src.chunks(chunk):
                 n = frames.shape[0]
                 aux_t = {name: _aux_chunk(a, offset, offset + n) for name, a in aux.items()}
-                out, extras = chain.apply(frames, offset, aux_t, states, ctx)
+                with ctx.gpu():
+                    out, extras = chain.apply(frames, offset, aux_t, states, ctx)
                 sinks["image"].write(out)
                 for name, path in aux_paths.items():
                     t = extras.get(name)

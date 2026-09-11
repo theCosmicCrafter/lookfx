@@ -1,4 +1,6 @@
-"""One worker, one job at a time (single GPU), with progress and cancel."""
+"""Job workers with progress and cancel: one lane for GPU work (render, solve —
+one at a time on the single GPU) and a separate lane for clip decodes
+(``proxy``), so opening a clip is not queued behind a running render."""
 
 from __future__ import annotations
 
@@ -63,13 +65,27 @@ class JobQueueFull(RuntimeError):
 
 
 class JobRunner:
+    #: job kinds that run on their own worker instead of the GPU lane
+    LANES: dict[str, str] = {"proxy": "proxy"}
+
     def __init__(self, max_queued: int = 8):
         self.max_queued = max_queued
         self.jobs: dict[str, Job] = {}
-        self._q: queue.Queue = queue.Queue()
         self._lock = threading.Lock()
-        self._thread = threading.Thread(target=self._loop, daemon=True, name="lookfx-jobs")
-        self._thread.start()
+        self._queues: dict[str, queue.Queue] = {}
+        self._threads: dict[str, threading.Thread] = {}
+        for lane in ("main", *sorted(set(self.LANES.values()))):
+            q: queue.Queue = queue.Queue()
+            self._queues[lane] = q
+            t = threading.Thread(target=self._loop, args=(q,), daemon=True, name=f"lookfx-jobs-{lane}")
+            self._threads[lane] = t
+            t.start()
+
+    def lane_of(self, kind: str) -> str:
+        return self.LANES.get(kind, "main")
+
+    def running(self) -> list[Job]:
+        return [j for j in list(self.jobs.values()) if j.state == "running"]
 
     def submit(self, kind: str, fn: Callable[[RunContext], Any], ctx: RunContext | None = None) -> Job:
         job = Job(id=uuid.uuid4().hex[:12], kind=kind)
@@ -85,7 +101,7 @@ class JobRunner:
             if pending >= self.max_queued:
                 raise JobQueueFull(f"too many jobs queued ({pending}); wait for one to finish or cancel some")
             self.jobs[job.id] = job
-        self._q.put((job, fn, ctx))
+        self._queues[self.lane_of(kind)].put((job, fn, ctx))
         return job
 
     def get(self, job_id: str) -> Job | None:
@@ -101,9 +117,9 @@ class JobRunner:
             job._emit("done", job.to_json())
         return True
 
-    def _loop(self):
+    def _loop(self, q: queue.Queue):
         while True:
-            job, fn, ctx = self._q.get()
+            job, fn, ctx = q.get()
             if job.cancel.is_set():
                 job.state = "cancelled"
                 job._emit("done", job.to_json())
