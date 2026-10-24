@@ -2,7 +2,7 @@ annotated-doc==0.0.5
 annotated-types==0.8.0
 anyio==4.15.1
 bottle==0.13.4
-certifi==2026.7.22
+certifi==2026.10.19
 cffi==2.1.1
 click==8.5.0
 clr_loader==0.3.1
@@ -31,7 +31,7 @@ Pygments==2.21.0
 pytest==9.1.1
 pythonnet==3.1.0
 pywebview==6.2.1
-setuptools==84.0.0
+setuptools==84.1.0
 starlette==1.6.0
 sympy==1.14.0
 torch==2.14.0+cu130
